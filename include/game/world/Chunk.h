@@ -1,8 +1,8 @@
 #pragma once
 #include <vector>
 
-#include "NbtBuilder.h"
-#include "PacketBuffer.h"
+#include "../nbt/NbtBuilder.h"
+#include "../../network/PacketBuffer.h"
 
 class ChunkSection {
 public:

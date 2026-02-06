@@ -12,21 +12,26 @@ find_package(Boost 1.80 REQUIRED)
 if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
 
-    add_executable(Aetherius src/main.cpp
-            include/Logger.h
-            src/Logger.cpp
-            src/Connection.cpp
-            include/Connection.h
-            src/Server.cpp
-            include/Server.h
-            include/Server.h
-            include/PacketBuffer.h
-            include/NbtBuilder.h
-            include/World.h
-            include/Chunk.h)
+    file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
+            "src/*.cpp"
+            "src/*.c"
+            "include/*.h"
+    )
+
+    add_executable(Aetherius ${CORE_SOURCES})
 
     target_link_libraries(Aetherius PRIVATE ${Boost_LIBRARIES})
 endif()
 
 find_package(tomlplusplus REQUIRED)
 target_link_libraries(Aetherius PRIVATE tomlplusplus::tomlplusplus)
+
+find_package(nlohmann_json REQUIRED)
+target_link_libraries(Aetherius PRIVATE nlohmann_json::nlohmann_json)
+
+find_package(OpenSSL REQUIRED)
+target_link_libraries(Aetherius PRIVATE OpenSSL::SSL)
+target_link_libraries(Aetherius PRIVATE OpenSSL::Crypto)
+
+find_package(ZLIB REQUIRED)
+target_link_libraries(Aetherius PRIVATE ZLIB::ZLIB)

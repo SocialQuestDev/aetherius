@@ -1,5 +1,5 @@
 #pragma once
-#include "NbtBuilder.h"
+#include "../nbt/NbtBuilder.h"
 
 std::vector<uint8_t> getDimensionCodec() {
     NbtBuilder nbt;
