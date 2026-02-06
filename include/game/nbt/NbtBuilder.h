@@ -50,4 +50,44 @@ public:
     void writeTagFloat(const std::string& name, float value);
 
     void startList(const std::string& name, TagType type, int32_t count);
+
+    size_t getReaderIndex() const;
+
+    void setReaderIndex(size_t index);
+
+    // ------------------- read methods -------------------
+
+    int8_t readByte();
+
+    int16_t readShort();
+
+    int32_t readInt();
+
+    int64_t readLong();
+
+    float readFloat();
+
+    std::string readString();
+
+    // ------------------- compound / list read -------------------
+
+    uint8_t readTagType();
+
+    void readStartCompound();
+
+    void readEndCompound();
+
+    void readStartList(TagType& type, int32_t& count);
+
+    std::string readTagString();
+
+    int32_t readTagInt();
+
+    int8_t readTagByte();
+
+    int64_t readTagLong();
+
+    float readTagFloat();
+private:
+    int readerIndex = 0;
 };
