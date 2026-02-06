@@ -6,7 +6,7 @@ Server::Server(boost::asio::io_context& io_context, short port)
     : io_context_(io_context),
       acceptor_(io_context, tcp::endpoint(tcp::v4(), port)) {
     
-    LOG_INFO("Server starting on port " + std::to_string(port));
+    Logger::info("Server starting on port " + std::to_string(port));
     start_accept();
 }
 
@@ -23,7 +23,7 @@ void Server::handle_accept(std::shared_ptr<Connection> new_connection, const boo
     if (!error) {
         new_connection->start();
     } else {
-        LOG_ERROR("Accept error: " + error.message());
+        Logger::error("Accept error: " + error.message());
     }
 
     start_accept();
