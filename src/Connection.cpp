@@ -56,7 +56,7 @@ void Connection::do_read() {
                 try {
                     handle_packet(received);
                 } catch (std::exception& e) {
-                    Logger::error("Packet parsing error: " + std::string(e.what()));
+                    LOG_ERROR("Packet parsing error: " + std::string(e.what()));
                 }
 
                 do_read();
@@ -74,7 +74,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
             int length = reader.readVarInt();
             int packetID = reader.readVarInt();
 
-            Logger::info("State: " + std::to_string((int)state_) + " | Packet ID: " + std::to_string(packetID));
+            LOG_DEBUG("State: " + std::to_string((int)state_) + " | Packet ID: " + std::to_string(packetID));
 
             if (state_ == State::HANDSHAKE) {
                 if (packetID == 0x00) { // Handshake Packet
@@ -83,7 +83,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                     unsigned short serverPort = reader.readUShort();
                     int nextState = reader.readVarInt();
 
-                    Logger::info("Handshake: Protocol " + std::to_string(protocolVersion) +
+                    LOG_DEBUG("Handshake: Protocol " + std::to_string(protocolVersion) +
                                  " NextState: " + std::to_string(nextState));
 
                     if (nextState == 1) state_ = State::STATUS;
@@ -123,7 +123,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
             else if (state_ == State::LOGIN) {
                 if (packetID == 0x00) {
                     std::string playerName = reader.readString();
-                    Logger::info("Player logging in: " + playerName);
+                    LOG_INFO("Player logging in: " + playerName);
 
                     PacketBuffer loginSuccess;
                     loginSuccess.writeVarInt(0x02);
@@ -131,7 +131,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                     loginSuccess.writeString(playerName);
                     send_packet(loginSuccess.finalize());
 
-                    Logger::info("Sent Login Success");
+                    LOG_DEBUG("Sent Login Success");
 
                     state_ = State::PLAY;
 
@@ -209,7 +209,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
             }
         }
     } catch (const std::exception& e) {
-        Logger::error("Packet error: " + std::string(e.what()));
+        LOG_ERROR("Packet error: " + std::string(e.what()));
     }
 }
 
@@ -217,6 +217,6 @@ void Connection::send_packet(std::vector<uint8_t> packetData) {
     auto self(shared_from_this());
     boost::asio::async_write(socket_, boost::asio::buffer(packetData),
         [this, self](boost::system::error_code ec, std::size_t length) {
-            if (ec) Logger::error("Send failed");
+            if (ec) LOG_ERROR("Send failed");
         });
 }

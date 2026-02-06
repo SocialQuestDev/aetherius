@@ -11,7 +11,7 @@ int main() {
 
         io_context.run();
     } catch (std::exception& e) {
-        Logger::error(std::string("Exception: ") + e.what());
+        LOG_CRITICAL(std::string("Exception: ") + e.what());
     }
 
     return 0;
