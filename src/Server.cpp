@@ -17,6 +17,13 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
     const int port = config["server"]["port"].value_or(25565);
     const std::string ip = config["server"]["ip"].value_or("0.0.0.0");
 
+    if (!config["server"]["online_mode"].value_or(false)) {
+        LOG_WARN("SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
+        LOG_WARN("The server will make no attempt to authenticate usernames. Beware.");
+        LOG_WARN("While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.");
+        LOG_WARN("To change this, set 'online-mode' to 'true' in the config.toml file.");
+    }
+
     const tcp::endpoint endpoint(boost::asio::ip::make_address(ip), port);
     acceptor_.open(endpoint.protocol());
     acceptor_.set_option(boost::asio::socket_base::reuse_address(true));

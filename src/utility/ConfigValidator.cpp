@@ -34,7 +34,8 @@ toml::table ConfigValidator::load_and_validate(const std::string& path) {
     });
 
     validate_entry(config, "server", "motd", toml::value("§aAetherius Server"));
-    validate_entry(config, "server", "online_mode", toml::value(false));
+    validate_entry(config, "server", "online_mode", toml::value(true));
+    validate_entry(config, "server", "compression_enabled", toml::value(true));
     validate_entry(config, "server", "compression_threshold", toml::value(256));
 
     if (before != table_to_string(config)) {
