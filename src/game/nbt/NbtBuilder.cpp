@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <stdexcept>
+#include <vector>
 
 // native write
 
@@ -20,10 +21,20 @@ void NbtBuilder::writeLong(int64_t v) {
     for (int i = 7; i >= 0; --i) writeByte((v >> (i * 8)) & 0xFF);
 }
 
+void NbtBuilder::writeULong(uint64_t v) {
+    for (int i = 7; i >= 0; --i) writeByte((v >> (i * 8)) & 0xFF);
+}
+
 void NbtBuilder::writeFloat(float v) {
     uint32_t data;
     std::memcpy(&data, &v, sizeof(float));
     writeInt(data);
+}
+
+void NbtBuilder::writeDouble(double v) {
+    uint64_t data;
+    std::memcpy(&data, &v, sizeof(double));
+    writeULong(data);
 }
 
 void NbtBuilder::writeString(const std::string &s) {
@@ -36,10 +47,15 @@ void NbtBuilder::writeString(const std::string &s) {
 void NbtBuilder::startCompound(const std::string &name) {
     writeByte(TAG_COMPOUND);
     writeString(name);
+    compound_level++;
 }
 
 void NbtBuilder::endCompound() {
+    if (compound_level == 0) {
+        throw std::runtime_error("Unmatched endCompound() call");
+    }
     writeByte(TAG_END);
+    compound_level--;
 }
 
 void NbtBuilder::startCompound() {
@@ -78,11 +94,29 @@ void NbtBuilder::writeTagFloat(const std::string& name, float value) {
     writeFloat(value);
 }
 
+void NbtBuilder::writeTagDouble(const std::string& name, double value) {
+    writeByte(TAG_DOUBLE);
+    writeString(name);
+    writeDouble(value);
+}
+
 void NbtBuilder::startList(const std::string& name, TagType type, int32_t count) {
     writeByte(TAG_LIST);
     writeString(name);
     writeByte(type);
     writeInt(count);
+}
+
+void NbtBuilder::startListItem() {
+    compound_level++;
+}
+
+void NbtBuilder::endListItem() {
+    if (compound_level == 0) {
+        throw std::runtime_error("Unmatched endListItem() call");
+    }
+    writeByte(TAG_END);
+    compound_level--;
 }
 
 size_t NbtBuilder::getReaderIndex() const {
@@ -94,8 +128,7 @@ void NbtBuilder::setReaderIndex(size_t index) {
     readerIndex = index;
 }
 
-// ------------------- read methods -------------------
-
+// read methods...
 int8_t NbtBuilder::readByte() {
     if (readerIndex >= buffer.size()) throw std::runtime_error("NbtBuilder: readByte out of bounds");
     return buffer[readerIndex++];
@@ -143,8 +176,6 @@ std::string NbtBuilder::readString() {
     readerIndex += len;
     return s;
 }
-
-// ------------------- compound / list read -------------------
 
 uint8_t NbtBuilder::readTagType() {
     return readByte();

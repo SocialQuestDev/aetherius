@@ -7,10 +7,12 @@
 #include "../../include/utility/VectorUtilities.h"
 #include "../../include/game/player/PlayerList.h"
 #include "../../include/game/player/Player.h"
+#include "../../include/game/world/World.h"
 
 #include <toml++/toml.hpp>
 #include <nlohmann/json.hpp>
 #include <zlib.h>
+#include <fstream>
 
 using json = nlohmann::json;
 
@@ -77,6 +79,48 @@ void Connection::do_read() {
                 LOG_DEBUG("Connection closed or error: " + ec.message());
             }
         });
+}
+
+void Connection::send_join_game() {
+    PacketBuffer joinGame;
+    joinGame.writeVarInt(0x26);
+    joinGame.writeInt(1); // Entity ID
+    joinGame.writeBoolean(false); // isHardcore
+    joinGame.writeByte(0); // gameMode
+    joinGame.writeByte(255); // previousGameMode
+
+    joinGame.writeVarInt(3); // World Count
+    joinGame.writeString("minecraft:overworld");
+    joinGame.writeString("minecraft:the_nether");
+    joinGame.writeString("minecraft:the_end");
+
+    World& world = Server::get_instance().get_world();
+    auto dimensionCodec = world.getDimensionCodec();
+    joinGame.writeNbt(dimensionCodec);
+
+    auto dimension = world.getDimension();
+    joinGame.writeNbt(dimension);
+
+    joinGame.writeString("minecraft:overworld"); // World Name
+    joinGame.writeLong(0); // Hashed Seed
+    joinGame.writeVarInt(20); // Max Players
+    joinGame.writeVarInt(10); // View Distance
+    joinGame.writeBoolean(false); // Reduced Debug Info
+    joinGame.writeBoolean(true); // Enable respawn screen
+    joinGame.writeBoolean(false); // Is Debug
+    joinGame.writeBoolean(false); // Is Flat
+    send_packet(joinGame);
+
+    PacketBuffer posLook;
+    posLook.writeVarInt(0x36);
+    posLook.writeDouble(0.0);
+    posLook.writeDouble(10.0);
+    posLook.writeDouble(0.0);
+    posLook.writeFloat(0.0f);
+    posLook.writeFloat(0.0f);
+    posLook.writeByte(0x00);
+    posLook.writeVarInt(1);
+    send_packet(posLook);
 }
 
 void Connection::handle_packet(std::vector<uint8_t>& rawData) {
@@ -249,11 +293,12 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                         loginSuccess.writeString(playerName);
                         send_packet(loginSuccess);
 
-                        std::string empty = "";
-
-                        PlayerList::get_instance().add_player(nickname, uuidStr, empty);
-                        connected = true;
                         state_ = State::PLAY;
+                        std::string skin = "";
+                        PlayerList::get_instance().add_player(nickname, uuidStr, skin);
+                        connected = true;
+
+                        send_join_game();
                     }
                 }
                 else if (packetID == 0x01) { // Encryption Response
@@ -297,8 +342,34 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                     encrypt = true;
                     state_ = State::PLAY;
 
+                    send_join_game();
+
                     LOG_DEBUG("Online auth completed, encryption enabled.");
                     return;
+                }
+            } else if (state_ == State::PLAY) {
+                if (packetID == 0x00) { // Teleport Confirm
+                    int teleportId = reader.readVarInt();
+                    LOG_DEBUG("Player confirmed teleport ID: " + std::to_string(teleportId));
+
+                    // Now we can send the world chunks
+                    World& world = server.get_world();
+                    for (int x = -1; x <= 1; ++x) {
+                        for (int z = -1; z <= 1; ++z) {
+                            ChunkColumn* chunk = world.generateChunk(x, z);
+                            PacketBuffer chunkPacket;
+                            chunkPacket.writeVarInt(0x22); // Chunk Data
+                            auto chunkPayload = chunk->serialize();
+                            chunkPacket.data.insert(chunkPacket.data.end(), chunkPayload.begin(), chunkPayload.end());
+                            send_packet(chunkPacket);
+                        }
+                    }
+                } else if (packetID == 0x10) { // Keep Alive
+                    long long id = reader.readLong();
+                    PacketBuffer keepAlive;
+                    keepAlive.writeVarInt(0x21);
+                    keepAlive.writeLong(id);
+                    send_packet(keepAlive);
                 }
             }
         }

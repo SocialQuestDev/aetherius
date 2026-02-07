@@ -2,9 +2,9 @@
 #include "../../include/crypto/AES.h"
 #include "../../include/Logger.h"
 #include "../../include/other/deflate.h"
+#include <cstring>
 
-// read
-
+// read methods...
 uint8_t PacketBuffer::readByte() {
     if (readerIndex >= data.size()) {
         throw std::runtime_error("Buffer overflow: trying to read beyond data size");
@@ -14,12 +14,13 @@ uint8_t PacketBuffer::readByte() {
 
 std::vector<uint8_t> PacketBuffer::readByteArray() {
     int length = readVarInt();
-
     std::vector<uint8_t> result;
-
-    for (int i = 0; i < length; i++)
-        result.push_back(readByte());
-
+    result.reserve(length);
+    if (readerIndex + length > data.size()) {
+        throw std::runtime_error("Buffer overflow: trying to read byte array beyond data size");
+    }
+    result.insert(result.end(), data.begin() + readerIndex, data.begin() + readerIndex + length);
+    readerIndex += length;
     return result;
 }
 
@@ -32,18 +33,27 @@ int PacketBuffer::readVarInt() {
         int value = (read & 0b01111111);
         result |= (value << (7 * numRead));
         numRead++;
+        if (numRead > 5) {
+            throw std::runtime_error("VarInt is too big");
+        }
     } while ((read & 0b10000000) != 0);
     return result;
 }
 
 std::string PacketBuffer::readString() {
     const int length = readVarInt();
+    if (readerIndex + length > data.size()) {
+        throw std::runtime_error("Buffer overflow: trying to read string beyond data size");
+    }
     std::string str(data.begin() + readerIndex, data.begin() + readerIndex + length);
     readerIndex += length;
     return str;
 }
 
 int64_t PacketBuffer::readLong() {
+    if (readerIndex + 8 > data.size()) {
+        throw std::runtime_error("Buffer overflow: trying to read long beyond data size");
+    }
     int64_t res = 0;
     for (int i = 0; i < 8; i++) {
         res = (res << 8) | data[readerIndex++];
@@ -52,6 +62,9 @@ int64_t PacketBuffer::readLong() {
 }
 
 uint64_t PacketBuffer::readULong() {
+    if (readerIndex + 8 > data.size()) {
+        throw std::runtime_error("Buffer overflow: trying to read ulong beyond data size");
+    }
     uint64_t res = 0;
     for (int i = 0; i < 8; i++) {
         res = (res << 8) | data[readerIndex++];
@@ -62,27 +75,25 @@ uint64_t PacketBuffer::readULong() {
 UUID PacketBuffer::readUUID() {
     uint64_t high = readULong();
     uint64_t low = readULong();
-
     return {high, low};
 }
 
 unsigned short PacketBuffer::readUShort() {
+    if (readerIndex + 2 > data.size()) {
+        throw std::runtime_error("Buffer overflow: trying to read ushort beyond data size");
+    }
     unsigned short res = (data[readerIndex] << 8) | data[readerIndex + 1];
     readerIndex += 2;
     return res;
 }
 
-// write
 
-void PacketBuffer::writeByte(uint8_t value) {
-    data.push_back(value);
-}
+// write methods...
+void PacketBuffer::writeByte(uint8_t value) { data.push_back(value); }
+void PacketBuffer::writeBoolean(bool value) { writeByte(value ? 1 : 0); }
 
 void PacketBuffer::writeByteArray(std::vector<uint8_t>& value) {
-    const int length = value.size();
-
-    writeVarInt(length);
-
+    writeVarInt(value.size());
     data.insert(data.end(), value.begin(), value.end());
 }
 
@@ -99,7 +110,7 @@ void PacketBuffer::writeVarInt(int value) {
 
 void PacketBuffer::writeString(const std::string &str) {
     writeVarInt(str.length());
-    for (char c : str) writeByte(c);
+    data.insert(data.end(), str.begin(), str.end());
 }
 
 void PacketBuffer::writeShort(int16_t value) {
@@ -133,31 +144,58 @@ void PacketBuffer::writeUUID(const UUID &uuid) {
     writeUUID(uuid.high, uuid.low);
 }
 
+void PacketBuffer::writeFloat(float value) {
+    uint32_t val;
+    std::memcpy(&val, &value, sizeof(float));
+    writeInt(val);
+}
+
+void PacketBuffer::writeDouble(double value) {
+    uint64_t val;
+    std::memcpy(&val, &value, sizeof(double));
+    writeULong(val);
+}
+
+void PacketBuffer::writeNbt(const std::vector<uint8_t>& nbt) {
+    data.insert(data.end(), nbt.begin(), nbt.end());
+}
+
 // other
 
 std::vector<uint8_t> PacketBuffer::finalize(bool compressionEnabled, int threshold, CryptoState* crypto) {
-    PacketBuffer body;
+    PacketBuffer payload_buf; // This will hold the data part of the packet ([Data Length] + [Data])
 
-    if (threshold >= 0 && compressionEnabled) {
+    if (compressionEnabled) {
         if ((int)this->data.size() >= threshold) {
+            // Data is large enough to be compressed
             std::vector<uint8_t> compressed = compressData(this->data);
-            body.writeVarInt(this->data.size()); // Uncompressed Length
-            body.data.insert(body.data.end(), compressed.begin(), compressed.end());
+
+            // Write the size of the *uncompressed* data
+            payload_buf.writeVarInt(this->data.size());
+            // Append the *compressed* data
+            payload_buf.data.insert(payload_buf.data.end(), compressed.begin(), compressed.end());
         } else {
-            body.writeVarInt(0);
-            body.data.insert(body.data.end(), this->data.begin(), this->data.end());
+            // Data is too small, send uncompressed
+            // Write 0 as data length to indicate uncompressed packet
+            payload_buf.writeVarInt(0);
+            // Append the uncompressed data
+            payload_buf.data.insert(payload_buf.data.end(), this->data.begin(), this->data.end());
         }
     } else {
-        body.data.insert(body.data.end(), this->data.begin(), this->data.end());
+        // Compression is not enabled at all for this connection
+        payload_buf.data = this->data;
     }
 
-    PacketBuffer finalPacket;
-    finalPacket.writeVarInt(body.data.size());
-    finalPacket.data.insert(finalPacket.data.end(), body.data.begin(), body.data.end());
+    // Now, create the final packet by prepending the total length of the payload
+    PacketBuffer final_packet_buf;
+    final_packet_buf.writeVarInt(payload_buf.data.size());
+    final_packet_buf.data.insert(final_packet_buf.data.end(), payload_buf.data.begin(), payload_buf.data.end());
+
+    std::vector<uint8_t> final_data = final_packet_buf.data;
 
     if (crypto) {
-        aes::encrypt(*crypto, finalPacket.data.data(), finalPacket.data.size());
+        aes::encrypt(*crypto, final_data.data(), final_data.size());
     }
 
-    return finalPacket.data;
+    return final_data;
 }

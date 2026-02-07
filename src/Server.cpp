@@ -4,6 +4,7 @@
 #include "../include/game/player/PlayerList.h"
 #include "../include/crypto/RSA.h"
 #include "../include/utility/ConfigValidator.h"
+#include "../include/game/world/WorldGenerator.h"
 
 Server* Server::instance;
 
@@ -13,6 +14,8 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
     LOG_INFO("Loading configuration...");
     config = ConfigValidator::load_and_validate("config.toml");
     LOG_INFO("Configuration loaded and validated.");
+
+    world = std::make_unique<World>(std::make_unique<FlatWorldGenerator>());
 
     const int port = config["server"]["port"].value_or(25565);
     const std::string ip = config["server"]["ip"].value_or("0.0.0.0");
@@ -47,6 +50,10 @@ Server& Server::get_instance() {
 
 toml::table& Server::get_config() {
     return config;
+}
+
+World& Server::get_world() {
+    return *world;
 }
 
 std::vector<uint8_t>& Server::get_public_key() const {

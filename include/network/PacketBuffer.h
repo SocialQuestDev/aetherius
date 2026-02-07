@@ -15,40 +15,28 @@ public:
     PacketBuffer() = default;
     
     uint8_t readByte();
-
     std::vector<uint8_t> readByteArray();
-
     int readVarInt();
-
     std::string readString();
-
     int64_t readLong();
-
     uint64_t readULong();
-
     UUID readUUID();
-
     unsigned short readUShort();
 
     void writeByte(uint8_t value);
-
+    void writeBoolean(bool value);
     void writeByteArray(std::vector<uint8_t>& value);
-
     void writeVarInt(int value);
-
     void writeString(const std::string& str);
-
     void writeShort(int16_t value);
-
     void writeInt(int32_t value);
-
     void writeLong(int64_t value);
-
     void writeULong(uint64_t value);
-
     void writeUUID(uint64_t high, uint64_t low);
-
     void writeUUID(const UUID& uuid);
+    void writeFloat(float value);
+    void writeDouble(double value);
+    void writeNbt(const std::vector<uint8_t>& nbt);
 
     std::vector<uint8_t> finalize(bool compressionEnabled, int threshold, CryptoState* crypto);
 };
