@@ -31,7 +31,6 @@ private:
     void send_packet(PacketBuffer& packet);
     void send_packet_raw(std::vector<uint8_t> packetData);
 
-    std::unique_ptr<toml::table> config;
     std::unique_ptr<CryptoState> crypto_state;
     std::unique_ptr<std::vector<uint8_t>> verify_token;
 
@@ -43,6 +42,6 @@ private:
     std::string nickname = "";
     std::vector<uint8_t> stream_buffer_;
     tcp::socket socket_;
-    uint8_t buffer_[4096];
+    uint8_t buffer_[4096]{};
     State state_ = State::HANDSHAKE;
 };

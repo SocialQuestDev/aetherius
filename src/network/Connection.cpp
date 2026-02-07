@@ -1,7 +1,6 @@
 #include "../../include/network/Connection.h"
 #include "../../include/Logger.h"
 #include "../../include/game/world/Chunk.h"
-#include "../../include/game/world/World.h"
 #include "../../include/Server.h"
 #include "../../include/crypto/RSA.h"
 #include "../../include/auth/MojangAuthHelper.h"
@@ -11,13 +10,11 @@
 
 #include <toml++/toml.hpp>
 #include <nlohmann/json.hpp>
-#include <openssl/md5.h>
 #include <zlib.h>
 
 using json = nlohmann::json;
 
-Connection::Connection(boost::asio::io_context& io_context)
-    : socket_(io_context) {}
+Connection::Connection(boost::asio::io_context& io_context) : socket_(io_context), buffer_{} {}
 
 std::shared_ptr<Connection> Connection::create(boost::asio::io_context& io_context) {
     return std::shared_ptr<Connection>(new Connection(io_context));
@@ -32,10 +29,10 @@ void Connection::start() {
 }
 
 static std::string base64_encode_local(const std::vector<unsigned char>& data) {
-    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    static constexpr char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string out;
     int val = 0, valb = -6;
-    for (unsigned char c : data) {
+    for (const unsigned char c : data) {
         val = (val << 8) + c;
         valb += 8;
         while (valb >= 0) {
@@ -51,7 +48,7 @@ static std::string base64_encode_local(const std::vector<unsigned char>& data) {
 static std::string getIconBase64(const std::string& path) {
     std::ifstream file(path, std::ios::binary);
     if (!file) return "";
-    std::vector<unsigned char> buffer(std::istreambuf_iterator<char>(file), {});
+    const std::vector<unsigned char> buffer((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     return "data:image/png;base64," + base64_encode_local(buffer);
 }
 
@@ -59,23 +56,25 @@ void Connection::do_read() {
     auto self(shared_from_this());
 
     socket_.async_read_some(boost::asio::buffer(buffer_),
-        [this, self](boost::system::error_code ec, std::size_t length) {
+        [this, self](const boost::system::error_code &ec, const std::size_t length) {
             if (!ec) {
-                std::vector<uint8_t> received(buffer_, buffer_ + length);
+                std::vector received(buffer_, buffer_ + length);
 
                 if (encrypt && crypto_state) {
-                    aes::decrypt(*crypto_state, received.data(), (int)received.size());
+                    aes::decrypt(*crypto_state, received.data(), static_cast<int>(received.size()));
                 }
 
                 try {
                     handle_packet(received);
-                } catch (std::exception& e) {
+                }
+                catch (std::exception& e) {
                     LOG_ERROR("Packet parsing error: " + std::string(e.what()));
                 }
 
                 do_read();
-            } else {
-                LOG_INFO("Connection closed or error: " + ec.message());
+            }
+            else {
+                LOG_DEBUG("Connection closed or error: " + ec.message());
             }
         });
 }
@@ -85,13 +84,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
 
     try {
         Server& server = Server::get_instance();
-
-        if (!config) {
-            toml::table cfg = server.get_config();
-            config = std::make_unique<toml::table>(cfg);
-        }
-
-        toml::table& serverCfg = *config;
+        const toml::table& serverCfg = server.get_config();
 
         if (raw.data.size() == 1) {
             if (raw.data[0] == 0xFE) {
@@ -111,7 +104,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
             if (compression_enabled) {
                 size_t startIdx = raw.readerIndex;
                 int dataLength = raw.readVarInt();
-                int dataLenFieldSize = (int)(raw.readerIndex - startIdx);
+                int dataLenFieldSize = static_cast<int>(raw.readerIndex - startIdx);
 
                 int remainingBytes = packetLength - dataLenFieldSize;
 
@@ -148,10 +141,11 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                     int protocolVersion = reader.readVarInt();
                     std::string serverAddr = reader.readString();
                     unsigned short serverPort = reader.readUShort();
+
                     int nextState = reader.readVarInt();
 
-                    LOG_DEBUG("Handshake: Protocol " + std::to_string(protocolVersion) +
-                                 " NextState: " + std::to_string(nextState));
+                    LOG_DEBUG(std::format("Handshake: Protocol {} Address {}:{} NextState: {}",
+                                           protocolVersion, serverAddr, serverPort, nextState));
 
                     if (nextState == 1) state_ = State::STATUS;
                     else if (nextState == 2) state_ = State::LOGIN;
@@ -240,8 +234,8 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                             compPacket.writeVarInt(0x03); // Set Compression
                             compPacket.writeVarInt(compression_threshold);
 
-                            std::vector<uint8_t> raw = compPacket.finalize(false, -1, nullptr);
-                            send_packet_raw(raw);
+                            std::vector<uint8_t> packet_data = compPacket.finalize(false, -1, nullptr);
+                            send_packet_raw(packet_data);
 
                             compression_enabled = true;
                         }
@@ -272,9 +266,8 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                     std::vector<uint8_t> encryptedToken = reader.readByteArray();
 
                     std::vector<uint8_t> secret = server.decrypt_rsa(encryptedSecret);
-                    std::vector<uint8_t> token = server.decrypt_rsa(encryptedToken);
 
-                    if (!vectors_equal(token, *verify_token)) {
+                    if (std::vector<uint8_t> token = server.decrypt_rsa(encryptedToken); !vectors_equal(token, *verify_token)) {
                         LOG_ERROR("Verify token mismatch");
                         break;
                     }
@@ -292,11 +285,11 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                         compression_enabled = true;
                     }
 
-                    PlayerData data = auth::get_uuid(nickname);
+                    auto [uuid, textures] = auth::get_uuid(nickname);
 
                     PacketBuffer loginSuccess;
                     loginSuccess.writeVarInt(0x02);
-                    loginSuccess.writeUUID(data.uuid);
+                    loginSuccess.writeUUID(uuid);
                     loginSuccess.writeString(nickname);
 
                     send_packet(loginSuccess);
@@ -315,9 +308,15 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
 }
 
 void Connection::send_packet(PacketBuffer& packet) {
-    toml::table cfg = *config;
+    const auto& serverCfg = Server::get_instance().get_config();
 
-    std::vector<uint8_t> finalData = packet.finalize(compression_enabled, cfg["server"]["compression_threshold"].value_or(256), crypto_state.get());
+    const int threshold = serverCfg["server"]["compression_threshold"].value_or(256);
+
+    const std::vector<uint8_t> finalData = packet.finalize(
+        compression_enabled,
+        threshold,
+        crypto_state.get()
+    );
 
     send_packet_raw(finalData);
 }
@@ -325,10 +324,10 @@ void Connection::send_packet(PacketBuffer& packet) {
 void Connection::send_packet_raw(std::vector<uint8_t> packetData) {
     auto self(shared_from_this());
 
-    auto sharedData = std::make_shared<std::vector<uint8_t>>(std::move(packetData));
+    const auto sharedData = std::make_shared<std::vector<uint8_t>>(std::move(packetData));
 
     boost::asio::async_write(socket_, boost::asio::buffer(*sharedData),
-        [this, self, sharedData](boost::system::error_code ec, std::size_t length) {
+        [this, self, sharedData](const boost::system::error_code &ec, std::size_t length) {
             if (ec) {
                 LOG_ERROR("Send failed: " + ec.message());
             }
