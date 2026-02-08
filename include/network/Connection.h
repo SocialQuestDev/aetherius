@@ -31,6 +31,7 @@ private:
     void send_packet(PacketBuffer& packet);
     void send_packet_raw(std::vector<uint8_t> packetData);
     void send_join_game();
+    void send_light_data(int chunkX, int chunkZ);
 
     std::unique_ptr<CryptoState> crypto_state;
     std::unique_ptr<std::vector<uint8_t>> verify_token;

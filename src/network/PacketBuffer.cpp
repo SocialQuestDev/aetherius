@@ -12,6 +12,60 @@ uint8_t PacketBuffer::readByte() {
     return data[readerIndex++];
 }
 
+void PacketBuffer::readPosition() {
+    int64_t val = readLong();
+    int32_t x = val >> 38;
+    int32_t y = val << 52 >> 52;
+    int32_t z = val << 26 >> 38;
+}
+
+bool PacketBuffer::readBoolean() {
+    return readByte() != 0;
+}
+
+int16_t PacketBuffer::readShort() {
+    if (readerIndex + 2 > data.size()) {
+        throw std::runtime_error("Buffer overflow: readShort");
+    }
+    int16_t res = (data[readerIndex] << 8) | data[readerIndex + 1];
+    readerIndex += 2;
+    return res;
+}
+
+int32_t PacketBuffer::readInt() {
+    if (readerIndex + 4 > data.size()) {
+        throw std::runtime_error("Buffer overflow: readInt");
+    }
+    int32_t res = (data[readerIndex] << 24) | (data[readerIndex + 1] << 16) | 
+                  (data[readerIndex + 2] << 8) | data[readerIndex + 3];
+    readerIndex += 4;
+    return res;
+}
+
+float PacketBuffer::readFloat() {
+    int32_t val = readInt();
+    float res;
+    std::memcpy(&res, &val, sizeof(float));
+    return res;
+}
+
+double PacketBuffer::readDouble() {
+    uint64_t val = readULong();
+    double res;
+    std::memcpy(&res, &val, sizeof(double));
+    return res;
+}
+
+// Убедись, что readUShort у тебя такой же (Big Endian)
+unsigned short PacketBuffer::readUShort() {
+    if (readerIndex + 2 > data.size()) {
+        throw std::runtime_error("Buffer overflow: readUShort");
+    }
+    unsigned short res = (data[readerIndex] << 8) | data[readerIndex + 1];
+    readerIndex += 2;
+    return res;
+}
+
 std::vector<uint8_t> PacketBuffer::readByteArray() {
     int length = readVarInt();
     std::vector<uint8_t> result;
@@ -76,15 +130,6 @@ UUID PacketBuffer::readUUID() {
     uint64_t high = readULong();
     uint64_t low = readULong();
     return {high, low};
-}
-
-unsigned short PacketBuffer::readUShort() {
-    if (readerIndex + 2 > data.size()) {
-        throw std::runtime_error("Buffer overflow: trying to read ushort beyond data size");
-    }
-    unsigned short res = (data[readerIndex] << 8) | data[readerIndex + 1];
-    readerIndex += 2;
-    return res;
 }
 
 

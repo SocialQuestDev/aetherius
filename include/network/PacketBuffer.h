@@ -3,6 +3,7 @@
 #include <string>
 #include <cstdint>
 #include <stdexcept>
+#include <cstring>
 #include "../auth/UUID.h"
 #include "../crypto/AES.h"
 
@@ -14,15 +15,23 @@ public:
     explicit PacketBuffer(std::vector<uint8_t>& buffer) : data(buffer) {}
     PacketBuffer() = default;
     
+    // Read methods
     uint8_t readByte();
-    std::vector<uint8_t> readByteArray();
-    int readVarInt();
-    std::string readString();
+    bool readBoolean(); // Добавлено
+    int16_t readShort(); // Добавлено
+    int32_t readInt(); // Добавлено
     int64_t readLong();
     uint64_t readULong();
+    float readFloat(); // Добавлено
+    double readDouble(); // Добавлено
+    int readVarInt();
+    std::string readString();
+    std::vector<uint8_t> readByteArray();
     UUID readUUID();
     unsigned short readUShort();
+    void readPosition(); // Добавлено - читает позицию из long и распаковывает в x, y, z
 
+    // Write methods
     void writeByte(uint8_t value);
     void writeBoolean(bool value);
     void writeByteArray(std::vector<uint8_t>& value);
