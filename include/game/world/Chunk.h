@@ -1,6 +1,8 @@
 #pragma once
 #include <vector>
 #include <array>
+#include <string>
+#include <cstdint>
 
 #include "../nbt/NbtBuilder.h"
 #include "../../network/PacketBuffer.h"
@@ -17,44 +19,32 @@ public:
         PacketBuffer buf;
         short blockCount = 0;
         for (int block : blocks) {
-            if (block != 0) {
-                blockCount++;
-            }
+            if (block != 0) blockCount++;
         }
         buf.writeShort(blockCount);
 
-        if (blockCount == 0) {
-            buf.writeByte(4);
-            buf.writeVarInt(1);
-            buf.writeVarInt(0);
-            buf.writeVarInt(0);
-        } else {
-            uint8_t bitsPerBlock = 15;
-            buf.writeByte(bitsPerBlock);
+        // Используем 15 бит (Global Palette). 
+        // В 1.16+ если BitsPerBlock >= 9, палитра (Palette) в пакете отсутствует.
+        uint8_t bitsPerBlock = 15; 
+        buf.writeByte(bitsPerBlock);
 
-            buf.writeVarInt(0);
+        int blocksPerLong = 4; // 64 / 15 = 4
+        int dataArraySize = 1024; // 4096 / 4 = 1024
+        
+        buf.writeVarInt(dataArraySize);
 
-            int dataArraySize = (4096 * bitsPerBlock) / 64;
-            buf.writeVarInt(dataArraySize);
+        std::vector<uint64_t> dataArray(dataArraySize, 0);
+        for (int i = 0; i < 4096; ++i) {
+            uint64_t blockValue = (uint64_t)blocks[i];
+            int longIndex = i / blocksPerLong; 
+            int subIndex = i % blocksPerLong;
+            int shift = subIndex * 15; // Каждые 15 бит
 
-            std::vector<uint64_t> dataArray(dataArraySize, 0);
-            for (int i = 0; i < 4096; ++i) {
-                int startBit = i * bitsPerBlock;
-                int startIndex = startBit / 64;
-                int endIndex = (startBit + bitsPerBlock - 1) / 64;
-                int startBitInIndex = startBit % 64;
+            dataArray[longIndex] |= (blockValue << shift);
+        }
 
-                uint64_t value = blocks[i];
-
-                dataArray[startIndex] |= (value << startBitInIndex);
-                if (startIndex != endIndex) {
-                    dataArray[endIndex] |= (value >> (64 - startBitInIndex));
-                }
-            }
-
-            for (uint64_t val : dataArray) {
-                buf.writeULong(val);
-            }
+        for (uint64_t val : dataArray) {
+            buf.writeULong(val);
         }
 
         return buf.data;
@@ -73,41 +63,74 @@ public:
         sections[sectionIndex].blocks[blockIndex] = blockId;
     }
 
+    // Вспомогательная функция для записи Long Array в NBT (Исправлено)
+    void writeNbtLongArray(std::vector<uint8_t>& buffer, const std::string& name, const std::vector<int64_t>& data) {
+        buffer.push_back(12); // TAG_Long_Array
+        
+        // Имя тега
+        uint16_t nameLen = (uint16_t)name.length();
+        buffer.push_back((uint8_t)(nameLen >> 8));
+        buffer.push_back((uint8_t)(nameLen & 0xFF));
+        for (char c : name) buffer.push_back(c);
+
+        // Размер массива
+        int32_t size = (int32_t)data.size();
+        buffer.push_back((uint8_t)((size >> 24) & 0xFF));
+        buffer.push_back((uint8_t)((size >> 16) & 0xFF));
+        buffer.push_back((uint8_t)((size >> 8) & 0xFF));
+        buffer.push_back((uint8_t)(size & 0xFF));
+
+        // Элементы
+        for (int64_t val : data) {
+            for (int i = 7; i >= 0; --i) {
+                buffer.push_back((uint8_t)((val >> (i * 8)) & 0xFF));
+            }
+        }
+    }
+
     std::vector<uint8_t> serialize() {
         PacketBuffer buf;
+        
+        // 1. Координаты
         buf.writeInt(x);
         buf.writeInt(z);
-        buf.writeBoolean(true); // Full chunk
+        buf.writeBoolean(true); 
 
+        // 2. Маска секций
         int mask = 0;
         for (int i = 0; i < 16; ++i) {
-            mask |= (1 << i);
+            bool hasBlocks = false;
+            for(int b : sections[i].blocks) if(b != 0) { hasBlocks = true; break; }
+            if (hasBlocks) mask |= (1 << i);
         }
+        if (mask == 0) mask = 1; 
         buf.writeVarInt(mask);
 
-        NbtBuilder nbt;
-        nbt.startCompound();
-        nbt.startList("MOTION_BLOCKING", TAG_LONG, 37);
-        for(int i = 0; i < 37; ++i) {
-            nbt.writeLong(0);
-        }
-        nbt.endCompound();
-        
-        auto nbtData = nbt.buffer;
-        buf.data.insert(buf.data.end(), nbtData.begin(), nbtData.end());
+        // 3. NBT Heightmaps (Исправленный пустой компаунд)
+        buf.writeByte(10); // TAG_Compound
+        buf.writeShort(0); // Пустое имя (длина 0)
+        buf.writeByte(0);  // TAG_End
 
+        // 4. Биомы (Исправлено для 1.16.5)
+        buf.writeVarInt(1024); // Длина массива
         for(int i = 0; i < 1024; ++i) {
-            buf.writeVarInt(1); // Plains
+            buf.writeVarInt(1); // Plains биом
         }
 
-        PacketBuffer sectionsBuffer;
-        for (auto& section : sections) {
-            auto sectionData = section.serialize();
-            sectionsBuffer.data.insert(sectionsBuffer.data.end(), sectionData.begin(), sectionData.end());
+        // 5. Данные секций
+        PacketBuffer sectionsData;
+        for (int i = 0; i < 16; ++i) {
+            if (mask & (1 << i)) {
+                auto s = sections[i].serialize();
+                sectionsData.data.insert(sectionsData.data.end(), s.begin(), s.end());
+            }
         }
-        buf.writeByteArray(sectionsBuffer.data);
+        
+        buf.writeVarInt((int)sectionsData.data.size());
+        buf.data.insert(buf.data.end(), sectionsData.data.begin(), sectionsData.data.end());
 
-        buf.writeVarInt(0); // Block entities
+        // 6. Block Entities
+        buf.writeVarInt(0); 
 
         return buf.data;
     }

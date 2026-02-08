@@ -108,6 +108,7 @@ void PacketBuffer::writeVarInt(int value) {
     } while (value != 0);
 }
 
+
 void PacketBuffer::writeString(const std::string &str) {
     writeVarInt(str.length());
     data.insert(data.end(), str.begin(), str.end());
@@ -156,8 +157,10 @@ void PacketBuffer::writeDouble(double value) {
     writeULong(val);
 }
 
-void PacketBuffer::writeNbt(const std::vector<uint8_t>& nbt) {
-    data.insert(data.end(), nbt.begin(), nbt.end());
+void PacketBuffer::writeNbt(const std::vector<uint8_t>& nbtData) {
+    for (uint8_t b : nbtData) {
+        this->data.push_back(b);
+    }
 }
 
 // other

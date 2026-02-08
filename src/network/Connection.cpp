@@ -83,16 +83,14 @@ void Connection::do_read() {
 
 void Connection::send_join_game() {
     PacketBuffer joinGame;
-    joinGame.writeVarInt(0x26);
+    joinGame.writeVarInt(0x24);
     joinGame.writeInt(1); // Entity ID
     joinGame.writeBoolean(false); // isHardcore
-    joinGame.writeByte(0); // gameMode
+    joinGame.writeByte(1); // gameMode
     joinGame.writeByte(255); // previousGameMode
 
-    joinGame.writeVarInt(3); // World Count
+    joinGame.writeVarInt(1); // World Count
     joinGame.writeString("minecraft:overworld");
-    joinGame.writeString("minecraft:the_nether");
-    joinGame.writeString("minecraft:the_end");
 
     World& world = Server::get_instance().get_world();
     auto dimensionCodec = world.getDimensionCodec();
@@ -110,16 +108,17 @@ void Connection::send_join_game() {
     joinGame.writeBoolean(false); // Is Debug
     joinGame.writeBoolean(false); // Is Flat
     send_packet(joinGame);
+    // ----------------------------------------
 
     PacketBuffer posLook;
-    posLook.writeVarInt(0x36);
-    posLook.writeDouble(0.0);
-    posLook.writeDouble(10.0);
-    posLook.writeDouble(0.0);
-    posLook.writeFloat(0.0f);
-    posLook.writeFloat(0.0f);
-    posLook.writeByte(0x00);
-    posLook.writeVarInt(1);
+    posLook.writeVarInt(0x34); // Правильный ID для 1.16.5
+    posLook.writeDouble(0.0);  // X
+    posLook.writeDouble(5.0); // Y (Поднял на 70, чтобы не быть в полу)
+    posLook.writeDouble(0.0);  // Z
+    posLook.writeFloat(0.0f);  // Yaw
+    posLook.writeFloat(0.0f);  // Pitch
+    posLook.writeByte(0x00);   // Flags
+    posLook.writeVarInt(1);    // Teleport ID
     send_packet(posLook);
 }
 
@@ -352,22 +351,28 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                     int teleportId = reader.readVarInt();
                     LOG_DEBUG("Player confirmed teleport ID: " + std::to_string(teleportId));
 
-                    // Now we can send the world chunks
                     World& world = server.get_world();
+
                     for (int x = -1; x <= 1; ++x) {
                         for (int z = -1; z <= 1; ++z) {
                             ChunkColumn* chunk = world.generateChunk(x, z);
+                            
                             PacketBuffer chunkPacket;
-                            chunkPacket.writeVarInt(0x22); // Chunk Data
-                            auto chunkPayload = chunk->serialize();
+                            chunkPacket.writeVarInt(0x20); // ID пакета Map Chunk
+                            
+                            auto chunkPayload = chunk->serialize(); 
                             chunkPacket.data.insert(chunkPacket.data.end(), chunkPayload.begin(), chunkPayload.end());
-                            send_packet(chunkPacket);
+
+                            // ОБЯЗАТЕЛЬНО ОТПРАВИТЬ:
+                            send_packet(chunkPacket); 
+                            
+                            LOG_DEBUG(std::format("Sent chunk [{}, {}]", x, z));
                         }
                     }
                 } else if (packetID == 0x10) { // Keep Alive
                     long long id = reader.readLong();
                     PacketBuffer keepAlive;
-                    keepAlive.writeVarInt(0x21);
+                    keepAlive.writeVarInt(0x1f);
                     keepAlive.writeLong(id);
                     send_packet(keepAlive);
                 }
