@@ -107,7 +107,7 @@ void Player::teleportToSpawn() {
     health = 20.0f;
     food = 20;
     x = 0.0;
-    y = 7.0;
+    y = 75.0;
     z = 0.0;
     yaw = 0.0f;
     pitch = 0.0f;
