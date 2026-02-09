@@ -32,6 +32,18 @@ public:
     void send_packet(OutboundPacket& packet);
     void send_packet_raw(std::vector<uint8_t> packetData);
 
+    void set_verify_token(const std::vector<uint8_t>& token);
+    std::vector<uint8_t> get_verify_token() const;
+
+    void set_nickname(const std::string& name);
+    std::string get_nickname() const;
+
+    void set_waiting_for_encryption(bool waiting);
+    bool is_waiting_for_encryption() const;
+
+    bool is_connected() const;
+    void enable_encryption(const std::vector<uint8_t>& shared_secret);
+
     void set_compression(bool enabled);
     void setPlayer(std::shared_ptr<Player> player);
     std::shared_ptr<Player> getPlayer() const;
@@ -50,11 +62,13 @@ private:
     std::unique_ptr<CryptoState> crypto_state;
     std::unique_ptr<std::vector<uint8_t>> verify_token;
 
+    bool waiting_for_response = false;
     bool connected = false;
     bool encrypt = false;
     bool just_enabled_encryption = false;
     bool compression_enabled = false;
     bool waitingForResponse = false;
+    std::string nickname;
     std::vector<uint8_t> stream_buffer_;
     tcp::socket socket_;
     uint8_t buffer_[4096]{};

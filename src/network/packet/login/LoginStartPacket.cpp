@@ -1,32 +1,60 @@
 #include "../../../../include/network/packet/login/LoginStartPacket.h"
 #include "../../../../include/network/packet/login/LoginSuccessPacket.h"
-#include "../../../../include/network/packet/login/SetCompressionPacket.h"
 #include "../../../../include/network/Connection.h"
 #include "../../../../include/Server.h"
-#include "../../../../include/utility/VectorUtilities.h"
 #include "../../../../include/game/player/PlayerList.h"
 #include "../../../../include/game/player/Player.h"
+#include "../../../../include/auth/MojangAuthHelper.h"
+#include "../../../../include/Logger.h"
 
 void LoginStartPacket::handle(Connection& connection) {
+    LOG_INFO("Player logging in: " + nickname);
+
     Server& server = Server::get_instance();
+    auto serverCfg = server.get_config();
 
-    auto player = std::make_shared<Player>(PlayerList::getInstance().getNextPlayerId(), nickname, connection.shared_from_this());
-    connection.setPlayer(player);
-    PlayerList::getInstance().addPlayer(player);
+    if (connection.is_connected()) {
+        PacketBuffer alreadyJoinedDisconnect;
+        alreadyJoinedDisconnect.writeVarInt(0x19);
+        alreadyJoinedDisconnect.writeString("{\"text\":\"Aetherius: Ты уже на сервере!\"}");
+        connection.send_packet_raw(alreadyJoinedDisconnect.finalize(false, -1, nullptr));
+        return;
+    }
 
-    if (server.get_config()["server"]["compression_enabled"].value_or(false)) {
-        int th = server.get_config()["server"]["compression_threshold"].value_or(256);
-        SetCompressionPacket compressionPacket(th);
+    if (serverCfg["server"]["online_mode"].value_or(false)) {
+        std::vector<uint8_t> verifyTokenTemp = auth::generate_verify_token();
+        connection.set_verify_token(verifyTokenTemp);
 
-        PacketBuffer buffer;
-        buffer.writeVarInt(compressionPacket.getPacketId());
-        compressionPacket.write(buffer);
-        connection.send_packet_raw(buffer.finalize(false, -1, nullptr));
+        PacketBuffer encReq;
+        encReq.writeVarInt(0x01);
+        encReq.writeString("");   // Server ID
+        encReq.writeByteArray(server.get_public_key());
+        encReq.writeByteArray(verifyTokenTemp);
 
+        connection.set_waiting_for_encryption(true);
+        connection.send_packet_raw(encReq.finalize(false, -1, nullptr));
+
+        return;
+    }
+
+    if (serverCfg["server"]["compression_enabled"].value_or(false)) {
+        int compression_threshold = serverCfg["server"]["compression_threshold"].value_or(256);
+
+        PacketBuffer compPacket;
+        compPacket.writeVarInt(0x03);
+        compPacket.writeVarInt(compression_threshold);
+
+        connection.send_packet_raw(compPacket.finalize(false, -1, nullptr));
         connection.set_compression(true);
     }
 
-    LoginSuccessPacket success(get_offline_UUID_128(nickname), nickname);
+    UUID uuid = get_offline_UUID_128(nickname);
+
+    auto player = std::make_shared<Player>(PlayerList::getInstance().getNextPlayerId(), uuid, nickname, "", connection.shared_from_this());
+    connection.setPlayer(player);
+    PlayerList::getInstance().addPlayer(player);
+
+    LoginSuccessPacket success(uuid, nickname);
     connection.send_packet(success);
 
     connection.setState(State::PLAY);

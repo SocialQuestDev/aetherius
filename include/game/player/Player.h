@@ -3,15 +3,19 @@
 #include <string>
 #include <memory>
 
+#include "../../auth/UUID.h"
+
 class Connection; // Forward declaration
 
 class Player {
 public:
-    Player(int id, std::string nickname, std::shared_ptr<Connection> connection);
+    Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection);
 
     // Getters
     int getId() const;
+    UUID getUuid() const;
     std::string getNickname() const;
+    std::string getSkin() const;
     std::shared_ptr<Connection> getConnection() const;
     double getX() const;
     double getY() const;
@@ -37,7 +41,9 @@ public:
 
 private:
     int id;
+    UUID uuid;
     std::string nickname;
+    std::string skin;
     std::shared_ptr<Connection> connection;
 
     // Player state

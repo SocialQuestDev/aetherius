@@ -7,16 +7,24 @@
 #include "../../../include/auth/MojangAuthHelper.h"
 #include "../../../include/Logger.h"
 
-Player::Player(int id, std::string nickname, std::shared_ptr<Connection> connection)
-    : id(id), nickname(std::move(nickname)), connection(connection),
+Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
+    : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),
       x(0.0), y(7.0), z(0.0), yaw(0.0f), pitch(0.0f), health(20.0f), food(20), dead(false), onGround(false) {}
 
 int Player::getId() const {
     return id;
 }
 
+UUID Player::getUuid() const {
+    return uuid;
+}
+
 std::string Player::getNickname() const {
     return nickname;
+}
+
+std::string Player::getSkin() const {
+    return skin;
 }
 
 std::shared_ptr<Connection> Player::getConnection() const {

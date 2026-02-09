@@ -56,6 +56,39 @@ std::shared_ptr<Player> Connection::getPlayer() const {
     return player;
 }
 
+void Connection::set_nickname(const std::string& name) {
+    this->nickname = name;
+}
+
+std::string Connection::get_nickname() const {
+    return nickname;
+}
+
+void Connection::set_verify_token(const std::vector<uint8_t>& token) {
+    this->verify_token = std::make_unique<std::vector<uint8_t>>(token);
+}
+
+std::vector<uint8_t> Connection::get_verify_token() const {
+    return verify_token ? *verify_token : std::vector<uint8_t>();
+}
+
+void Connection::set_waiting_for_encryption(bool waiting) {
+    this->waiting_for_response = waiting;
+}
+
+bool Connection::is_waiting_for_encryption() const {
+    return waiting_for_response;
+}
+
+bool Connection::is_connected() const {
+    return player != nullptr;
+}
+
+void Connection::enable_encryption(const std::vector<uint8_t>& shared_secret) {
+    crypto_state = std::make_unique<CryptoState>(aes::init_crypto(shared_secret));
+    encrypt = true;
+}
+
 void Connection::do_read() {
     auto self(shared_from_this());
     socket_.async_read_some(boost::asio::buffer(buffer_),
