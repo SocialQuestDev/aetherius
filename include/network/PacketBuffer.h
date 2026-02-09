@@ -17,19 +17,19 @@ public:
     
     // Read methods
     uint8_t readByte();
-    bool readBoolean(); // Добавлено
-    int16_t readShort(); // Добавлено
-    int32_t readInt(); // Добавлено
+    bool readBoolean();
+    int16_t readShort();
+    int32_t readInt();
     int64_t readLong();
     uint64_t readULong();
-    float readFloat(); // Добавлено
-    double readDouble(); // Добавлено
+    float readFloat();
+    double readDouble();
     int readVarInt();
     std::string readString();
     std::vector<uint8_t> readByteArray();
     UUID readUUID();
     unsigned short readUShort();
-    void readPosition(); // Добавлено - читает позицию из long и распаковывает в x, y, z
+    std::vector<int32_t> readPosition();
 
     // Write methods
     void writeByte(uint8_t value);

@@ -2,7 +2,9 @@
 #include "../../include/crypto/AES.h"
 #include "../../include/Logger.h"
 #include "../../include/other/deflate.h"
+#include <cstdint>
 #include <cstring>
+#include <vector>
 
 // read methods...
 uint8_t PacketBuffer::readByte() {
@@ -12,11 +14,12 @@ uint8_t PacketBuffer::readByte() {
     return data[readerIndex++];
 }
 
-void PacketBuffer::readPosition() {
+std::vector<int32_t> PacketBuffer::readPosition() {
     int64_t val = readLong();
     int32_t x = val >> 38;
     int32_t y = val << 52 >> 52;
     int32_t z = val << 26 >> 38;
+    return {x, y, z};
 }
 
 bool PacketBuffer::readBoolean() {
@@ -36,24 +39,46 @@ int32_t PacketBuffer::readInt() {
     if (readerIndex + 4 > data.size()) {
         throw std::runtime_error("Buffer overflow: readInt");
     }
-    int32_t res = (data[readerIndex] << 24) | (data[readerIndex + 1] << 16) | 
-                  (data[readerIndex + 2] << 8) | data[readerIndex + 3];
+    // Приводим каждый байт к uint32_t ПЕРЕД сдвигом, чтобы не потерять биты
+    int32_t res = (static_cast<uint32_t>(data[readerIndex]) << 24) |
+                  (static_cast<uint32_t>(data[readerIndex + 1]) << 16) |
+                  (static_cast<uint32_t>(data[readerIndex + 2]) << 8) |
+                  (static_cast<uint32_t>(data[readerIndex + 3]));
     readerIndex += 4;
     return res;
 }
 
 float PacketBuffer::readFloat() {
-    int32_t val = readInt();
+    if (readerIndex + 4 > data.size()) {
+        throw std::runtime_error("Buffer overflow: readFloat");
+    }
+
+    uint32_t val = (static_cast<uint32_t>(data[readerIndex])     << 24) |
+                   (static_cast<uint32_t>(data[readerIndex + 1]) << 16) |
+                   (static_cast<uint32_t>(data[readerIndex + 2]) << 8)  |
+                    static_cast<uint32_t>(data[readerIndex + 3]);
+
+    readerIndex += 4;
+
     float res;
     std::memcpy(&res, &val, sizeof(float));
     return res;
 }
 
 double PacketBuffer::readDouble() {
-    uint64_t val = readULong();
-    double res;
-    std::memcpy(&res, &val, sizeof(double));
-    return res;
+    if (readerIndex + 8 > data.size()) {
+        throw std::runtime_error("Buffer overflow: readDouble expecting Float64");
+    }
+
+    uint64_t val = 0;
+    for (int i = 0; i < 8; i++) {
+        val = (val << 8) | data[readerIndex++];
+    }
+
+    double tempRes;
+    std::memcpy(&tempRes, &val, sizeof(double));
+
+    return static_cast<double>(tempRes);
 }
 
 // Убедись, что readUShort у тебя такой же (Big Endian)
@@ -143,14 +168,15 @@ void PacketBuffer::writeByteArray(std::vector<uint8_t>& value) {
 }
 
 void PacketBuffer::writeVarInt(int value) {
+    uint32_t uValue = static_cast<uint32_t>(value); 
     do {
-        auto temp = static_cast<uint8_t>(value & 0b01111111);
-        value >>= 7;
-        if (value != 0) {
+        uint8_t temp = static_cast<uint8_t>(uValue & 0b01111111);
+        uValue >>= 7;
+        if (uValue != 0) {
             temp |= 0b10000000;
         }
         writeByte(temp);
-    } while (value != 0);
+    } while (uValue != 0);
 }
 
 

@@ -6,6 +6,8 @@
 #include <boost/asio.hpp>
 #include <vector>
 #include <toml++/toml.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <chrono>
 
 using boost::asio::ip::tcp;
 
@@ -32,6 +34,10 @@ private:
     void send_packet_raw(std::vector<uint8_t> packetData);
     void send_join_game();
     void send_light_data(int chunkX, int chunkZ);
+    void send_keep_alive();
+    void start_keep_alive_timer();
+    void kill_player();
+    void teleport_to_spawn();
 
     std::unique_ptr<CryptoState> crypto_state;
     std::unique_ptr<std::vector<uint8_t>> verify_token;
@@ -46,4 +52,7 @@ private:
     tcp::socket socket_;
     uint8_t buffer_[4096]{};
     State state_ = State::HANDSHAKE;
+    uint64_t last_keep_alive_id_;
+    boost::asio::steady_timer keep_alive_timer_;
+    bool is_dead = false;
 };
