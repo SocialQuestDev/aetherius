@@ -70,5 +70,5 @@ void EncryptionResponsePacket::handle(Connection& connection) {
     connection.send_join_game();
     connection.start_keep_alive_timer();
 
-    LOG_INFO("Online player logged in: " + nickname + " [" + std::to_string(uuid.high) + "]");
+    LOG_INFO("Online player logged in: " + nickname + " [" + uuid_to_string(uuid.high, uuid.low) + "]");
 }

@@ -7,8 +7,8 @@
 void GetChatMessagePacket::handle(Connection &connection) {
     LOG_DEBUG("Received chat message: " + message);
 
-    for (auto player: PlayerList::getInstance().getPlayers()) {
-        ChatMessagePacket chatPacket("{\"text\":\"Вы упали в бездну!\", \"color\":\"red\"}", 1, connection.getPlayer()->getUuid());
+    for (const auto& player: PlayerList::getInstance().getPlayers()) {
+        ChatMessagePacket chatPacket(R"({"text":")" + connection.getPlayer()->getNickname() + ": " + message + R"(", "color":"white"})", 1, connection.getPlayer()->getUuid());
         player.get()->getConnection()->send_packet(chatPacket);
     }
 }

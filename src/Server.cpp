@@ -9,10 +9,11 @@
 #include "../include/network/packet/status/StatusRequestPacket.h"
 #include "../include/network/packet/status/StatusPingPacket.h"
 #include "../include/network/packet/login/LoginStartPacket.h"
-#include "../include/network/packet/play/BrandPacket.h"
+#include "../include/network/packet/login/EncryptionResponsePacket.h"
 #include "../include/network/packet/play/KeepAlivePacketPlay.h"
 #include "../include/network/packet/play/TeleportConfirmPacket.h"
 #include "../include/network/packet/play/ClientStatusPacket.h"
+#include "../include/network/packet/play/GetChatMessagePacket.h"
 #include "../include/network/packet/play/PlayerPositionPacket.h"
 
 Server* Server::instance;
@@ -89,8 +90,10 @@ void Server::register_packets() {
     packet_registry_.registerPacket(State::STATUS, 0x01, []{ return std::make_unique<StatusPingPacket>(); });
 
     packet_registry_.registerPacket(State::LOGIN, 0x00, []{ return std::make_unique<LoginStartPacket>(); });
+    packet_registry_.registerPacket(State::LOGIN, 0x01, []{ return std::make_unique<EncryptionResponsePacket>(); });
 
     packet_registry_.registerPacket(State::PLAY, 0x00, []{ return std::make_unique<TeleportConfirmPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x03, []{ return std::make_unique<GetChatMessagePacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x04, []{ return std::make_unique<ClientStatusPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x10, []{ return std::make_unique<KeepAlivePacketPlay>(); });
     packet_registry_.registerPacket(State::PLAY, 0x12, []{ return std::make_unique<PlayerPositionPacketFull>(); });

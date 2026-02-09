@@ -3,9 +3,9 @@
 #include "../../../../include/Server.h"
 #include "../../../../include/game/world/World.h"
 #include "../../../../include/game/world/Chunk.h"
+#include "../../../../include/game/player/PlayerList.h"
 
 void TeleportConfirmPacket::handle(Connection& connection) {
-    // packet_update_view_position: 0x41
     PacketBuffer vp;
     vp.writeVarInt(0x40);
     vp.writeVarInt(0);
@@ -14,11 +14,10 @@ void TeleportConfirmPacket::handle(Connection& connection) {
 
     Server& server = Server::get_instance();
     World& world = server.get_world();
-    for (int x = -2; x <= 2; ++x) {
-        for (int z = -2; z <= 2; ++z) {
+    for (int x = -6; x <= 6; ++x) {
+        for (int z = -6; z <= 6; ++z) {
             ChunkColumn* chunk = world.generateChunk(x, z);
             PacketBuffer cp;
-            // packet_map_chunk: 0x21
             cp.writeVarInt(0x20);
             auto p = chunk->serialize();
             cp.data.insert(cp.data.end(), p.begin(), p.end());

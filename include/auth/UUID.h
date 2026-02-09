@@ -6,6 +6,10 @@
 struct UUID {
     uint64_t high;
     uint64_t low;
+
+    bool operator==(const UUID & uuid) const {
+        return high == uuid.high && low == uuid.low;
+    }
 };
 
 std::string get_offline_UUID(const std::string& nickname);

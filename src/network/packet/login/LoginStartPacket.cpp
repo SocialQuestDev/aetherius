@@ -6,9 +6,11 @@
 #include "../../../../include/game/player/Player.h"
 #include "../../../../include/auth/MojangAuthHelper.h"
 #include "../../../../include/Logger.h"
+#include "../../../../include/network/packet/play/ChatMessagePacket.h"
 
 void LoginStartPacket::handle(Connection& connection) {
     LOG_INFO("Player logging in: " + nickname);
+    connection.set_nickname(nickname);
 
     Server& server = Server::get_instance();
     auto serverCfg = server.get_config();
@@ -16,7 +18,7 @@ void LoginStartPacket::handle(Connection& connection) {
     if (connection.is_connected()) {
         PacketBuffer alreadyJoinedDisconnect;
         alreadyJoinedDisconnect.writeVarInt(0x19);
-        alreadyJoinedDisconnect.writeString("{\"text\":\"Aetherius: Ты уже на сервере!\"}");
+        alreadyJoinedDisconnect.writeString("{\"text\":\"You are already connected to a server.\", \"color\":\"red\"}");
         connection.send_packet_raw(alreadyJoinedDisconnect.finalize(false, -1, nullptr));
         return;
     }
@@ -60,6 +62,11 @@ void LoginStartPacket::handle(Connection& connection) {
     connection.setState(State::PLAY);
     connection.send_join_game();
     connection.start_keep_alive_timer();
+
+    for (const auto& client: PlayerList::getInstance().getPlayers()) {
+        ChatMessagePacket packet(R"({"text":" )" + nickname + R"( joined the game", "color":"yellow"})", 1, uuid);
+        client.get()->getConnection()->send_packet(packet);
+    }
 }
 
 void LoginStartPacket::read(PacketBuffer& buffer) {

@@ -33,8 +33,10 @@ toml::table ConfigValidator::load_and_validate(const std::string& path) {
         return val > 0 && val <= 65535;
     });
 
-    validate_entry(config, "server", "motd", toml::value("§aAetherius Server"));
+    validate_entry(config, "server", "motd", toml::value("§aAetherius §7— §bC++ Core\n§eWelcome!"));
     validate_entry(config, "server", "online_mode", toml::value(true));
+    validate_entry(config, "server", "max_players", toml::value(true));
+    validate_entry(config, "server", "icon_path", toml::value("server-icon.png"));
     validate_entry(config, "server", "compression_enabled", toml::value(true));
     validate_entry(config, "server", "compression_threshold", toml::value(256));
 
@@ -53,7 +55,7 @@ void ConfigValidator::create_default(const std::string& path) {
             { "ip", "0.0.0.0" },
             { "port", 25565 },
             { "motd", "§aAetherius §7— §bC++ Core\n§eWelcome!" },
-            { "max_players", 100 },
+            { "max_players", 20 },
             { "online_mode", true },
             { "icon_path", "server-icon.png" },
             { "compression_enabled", true },
