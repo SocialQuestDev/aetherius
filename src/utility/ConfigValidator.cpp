@@ -35,7 +35,7 @@ toml::table ConfigValidator::load_and_validate(const std::string& path) {
 
     validate_entry(config, "server", "motd", toml::value("§aAetherius §7— §bC++ Core\n§eWelcome!"));
     validate_entry(config, "server", "online_mode", toml::value(true));
-    validate_entry(config, "server", "max_players", toml::value(true));
+    validate_entry(config, "server", "max_players", toml::value(20));
     validate_entry(config, "server", "icon_path", toml::value("server-icon.png"));
     validate_entry(config, "server", "compression_enabled", toml::value(true));
     validate_entry(config, "server", "compression_threshold", toml::value(256));
