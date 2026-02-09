@@ -7,6 +7,7 @@
 #include "../../../../include/game/player/Player.h"
 #include "../../../../include/Logger.h"
 #include "../../../../include/utility/VectorUtilities.h"
+#include "../../../../include/network/packet/play/ChatMessagePacket.h"
 
 void EncryptionResponsePacket::read(PacketBuffer& buffer) {
     encryptedSharedSecret = buffer.readByteArray();
@@ -69,6 +70,11 @@ void EncryptionResponsePacket::handle(Connection& connection) {
     connection.setState(State::PLAY);
     connection.send_join_game();
     connection.start_keep_alive_timer();
+
+    for (const auto& client: PlayerList::getInstance().getPlayers()) {
+        ChatMessagePacket packet(R"({"text":")" + nickname + R"( joined the game", "color":"yellow"})", 1, uuid);
+        client.get()->getConnection()->send_packet(packet);
+    }
 
     LOG_INFO("Online player logged in: " + nickname + " [" + uuid_to_string(uuid.high, uuid.low) + "]");
 }

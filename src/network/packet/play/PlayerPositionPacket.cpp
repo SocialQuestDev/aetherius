@@ -1,9 +1,6 @@
 #include "../../../../include/network/packet/play/PlayerPositionPacket.h"
 #include "../../../../include/network/Connection.h"
-#include "../../../../include/Logger.h"
 #include "../../../../include/game/player/Player.h"
-#include "../../../../include/game/player/PlayerList.h"
-#include "../../../../include/network/packet/play/PlayerPositionAndLookPacket.h"
 
 // PlayerPositionPacketFull
 void PlayerPositionPacketFull::read(PacketBuffer& buffer) {
