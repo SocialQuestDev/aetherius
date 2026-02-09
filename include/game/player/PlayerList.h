@@ -1,44 +1,31 @@
 #pragma once
-#include "Player.h"
 
+#include "Player.h"
+#include <vector>
 #include <memory>
-#include <toml++/toml.hpp>
+#include <string>
+#include <algorithm>
+#include <mutex>
+#include <atomic>
 
 class PlayerList {
 public:
-    Player* get_player(int id) const;
-    void add_player(int id, std::string& nickname, std::string& uuid, std::string& textures);
-    void add_player(std::string& nickname, std::string& uuid, std::string& textures);
-    void remove_player(int id);
+    static PlayerList& getInstance();
 
-    int get_players_count() const;
-    void set_players_count(int count);
+    void addPlayer(std::shared_ptr<Player> player);
+    void removePlayer(int playerId);
+    std::shared_ptr<Player> getPlayer(int playerId);
+    std::shared_ptr<Player> getPlayer(const std::string& nickname);
 
-    int get_max_players() const;
-    void set_max_players(int count);
+    std::vector<std::shared_ptr<Player>> getPlayers();
+    int getNextPlayerId();
 
-    static PlayerList& get_instance() {
-        static PlayerList instance;
-        return instance;
-    }
 private:
-    int playersCount;
-    int maxPlayers;
-    std::unique_ptr<Player*[]> players;
-
-    PlayerList() {
-        auto config = toml::parse_file("config.toml");
-
-        playersCount = 0;
-        maxPlayers = config["server"]["max_players"].value_or(20);
-
-        players = std::make_unique<Player*[]>(maxPlayers);
-
-        for (int i = 0; i < maxPlayers; ++i) {
-            players[i] = nullptr;
-        }
-    }
-
+    PlayerList() : nextPlayerId(1) {}
     PlayerList(const PlayerList&) = delete;
     PlayerList& operator=(const PlayerList&) = delete;
+
+    std::vector<std::shared_ptr<Player>> players;
+    std::mutex playersMutex;
+    std::atomic<int> nextPlayerId;
 };

@@ -8,6 +8,12 @@
 #include "../../include/game/player/PlayerList.h"
 #include "../../include/game/player/Player.h"
 #include "../../include/game/world/World.h"
+#include "../../include/network/PacketRegistry.h"
+#include "../../include/network/packet/InboundPacket.h"
+#include "../../include/network/packet/OutboundPacket.h"
+#include "../../include/network/packet/play/JoinGamePacket.h"
+#include "../../include/network/packet/play/KeepAlivePacketClientbound.h"
+#include "../../include/network/packet/play/BrandPacket.h"
 
 #include <toml++/toml.hpp>
 #include <nlohmann/json.hpp>
@@ -17,11 +23,10 @@
 
 using json = nlohmann::json;
 
-Connection::Connection(boost::asio::io_context& io_context) 
-    : socket_(io_context), 
+Connection::Connection(boost::asio::io_context& io_context)
+    : socket_(io_context),
       keep_alive_timer_(io_context),
-      buffer_{},
-      is_dead(false) {}
+      buffer_{} {}
 
 std::shared_ptr<Connection> Connection::create(boost::asio::io_context& io_context) {
     return std::shared_ptr<Connection>(new Connection(io_context));
@@ -30,6 +35,26 @@ std::shared_ptr<Connection> Connection::create(boost::asio::io_context& io_conte
 tcp::socket& Connection::socket() { return socket_; }
 
 void Connection::start() { do_read(); }
+
+void Connection::setState(State state) {
+    state_ = state;
+}
+
+State Connection::getState() const {
+    return state_;
+}
+
+void Connection::set_compression(bool enabled) {
+    compression_enabled = enabled;
+}
+
+void Connection::setPlayer(std::shared_ptr<Player> player) {
+    this->player = player;
+}
+
+std::shared_ptr<Player> Connection::getPlayer() const {
+    return player;
+}
 
 void Connection::do_read() {
     auto self(shared_from_this());
@@ -41,7 +66,12 @@ void Connection::do_read() {
                 try { handle_packet(received); }
                 catch (std::exception& e) { LOG_ERROR("Packet parsing error: " + std::string(e.what())); }
                 do_read();
-            } else { LOG_DEBUG("Connection closed: " + ec.message()); }
+            } else {
+                if (player) {
+                    PlayerList::getInstance().removePlayer(player->getId());
+                }
+                LOG_DEBUG("Connection closed: " + ec.message());
+            }
         });
 }
 
@@ -58,101 +88,24 @@ void Connection::start_keep_alive_timer() {
 
 void Connection::send_keep_alive() {
     last_keep_alive_id_ = std::chrono::system_clock::now().time_since_epoch().count();
-    
-    PacketBuffer ka;
-    ka.writeVarInt(0x1f); // packet_keep_alive (Clientbound)
-    ka.writeLong(last_keep_alive_id_);
-    
+    KeepAlivePacketClientbound ka(last_keep_alive_id_);
     send_packet(ka);
 }
 
 void Connection::send_join_game() {
-    PacketBuffer joinGame;
-    joinGame.writeVarInt(0x24); // packet_login
-    joinGame.writeInt(1); 
-    joinGame.writeBoolean(false); 
-    joinGame.writeByte(1); // Gamemode: Creative
-    joinGame.writeByte(255); // Previous Gamemode
-    joinGame.writeVarInt(1); 
-    joinGame.writeString("minecraft:overworld");
-    
-    World& world = Server::get_instance().get_world();
-    joinGame.writeNbt(world.getDimensionCodec());
-    joinGame.writeNbt(world.getDimension());
-    
-    joinGame.writeString("minecraft:overworld");
-    joinGame.writeLong(0); // Hashed seed
-    joinGame.writeVarInt(20); 
-    joinGame.writeVarInt(10); 
-    joinGame.writeBoolean(false); 
-    joinGame.writeBoolean(true); 
-    joinGame.writeBoolean(false); 
-    joinGame.writeBoolean(false); 
-    send_packet(joinGame);
+    JoinGamePacket joinGamePacket(player->getId(), Server::get_instance().get_world());
+    send_packet(joinGamePacket);
 
-    teleport_to_spawn();
-}
+    BrandPacket brand("Aetherius");
+    send_packet(brand);
 
-void Connection::teleport_to_spawn() {
-    is_dead = false;
-
-    // packet_update_health: 0x4A
-    PacketBuffer health;
-    health.writeVarInt(0x49); 
-    health.writeFloat(20.0f);
-    health.writeVarInt(20);
-    health.writeFloat(5.0f);
-    send_packet(health);
-
-    // packet_position: 0x35
-    PacketBuffer posLook;
-    posLook.writeVarInt(0x34); 
-    posLook.writeDouble(0.0);  
-    posLook.writeDouble(7.0); 
-    posLook.writeDouble(0.0);  
-    posLook.writeFloat(0.0f);  
-    posLook.writeFloat(0.0f);  
-    posLook.writeByte(0x00);   
-    posLook.writeVarInt(1);    // Teleport ID
-    send_packet(posLook);
-    LOG_DEBUG("Player teleported to spawn and healed");
-}
-
-void Connection::kill_player() {
-    if (is_dead) return;
-    is_dead = true;
-
-    LOG_DEBUG("Player fell into the void. Sending death status and zero health.");
-    
-    // packet_update_health: 0x4A
-    PacketBuffer health;
-    health.writeVarInt(0x49); 
-    health.writeFloat(0.0f);  
-    health.writeVarInt(0);    
-    health.writeFloat(0.0f);  
-    send_packet(health);
-
-    // packet_entity_status: 0x1B
-    PacketBuffer death;
-    death.writeVarInt(0x1A); 
-    death.writeInt(1);       
-    death.writeByte(3);      
-    send_packet(death);
-
-    // packet_chat: 0x3B
-    PacketBuffer chat;
-    chat.writeVarInt(0x0E); 
-    chat.writeString("{\"text\":\"Вы упали в бездну!\", \"color\":\"red\"}");
-    chat.writeByte(1);      
-    chat.writeUUID(get_offline_UUID_128(nickname));
-    send_packet(chat);
+    player->teleportToSpawn();
 }
 
 void Connection::handle_packet(std::vector<uint8_t>& rawData) {
     PacketBuffer raw(rawData);
     try {
         Server& server = Server::get_instance();
-        const toml::table& serverCfg = server.get_config();
 
         while (raw.readerIndex < raw.data.size()) {
             int packetLength = raw.readVarInt();
@@ -163,7 +116,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                 size_t startIdx = raw.readerIndex;
                 int dataLength = raw.readVarInt();
                 int remainingBytes = packetLength - (int)(raw.readerIndex - startIdx);
-                
+
                 if (dataLength > 0) {
                     payload.resize(dataLength);
                     unsigned long destLen = dataLength;
@@ -181,124 +134,24 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
             PacketBuffer reader(payload);
             int packetID = reader.readVarInt();
 
-            if (state_ == State::HANDSHAKE) {
-                if (packetID == 0x00) {
-                    reader.readVarInt(); reader.readString(); reader.readUShort();
-                    int next = reader.readVarInt();
-                    state_ = (next == 1) ? State::STATUS : State::LOGIN;
-                }
-            }
-            else if (state_ == State::STATUS) {
-                if (packetID == 0x00) {
-                    json resp;
-                    resp["version"] = {{"name", "1.16.5"}, {"protocol", 754}};
-                    resp["players"] = {{"max", 20}, {"online", 0}, {"sample", json::array()}};
-                    resp["description"]["text"] = "Aetherius Server";
-                    PacketBuffer res; res.writeVarInt(0x00); res.writeString(resp.dump());
-                    send_packet(res);
-                } else if (packetID == 0x01) {
-                    PacketBuffer pong; pong.writeVarInt(0x01); pong.writeLong(reader.readLong());
-                    send_packet(pong);
-                }
-            }
-            else if (state_ == State::LOGIN) {
-                if (packetID == 0x00) {
-                    nickname = reader.readString();
-                    if (serverCfg["server"]["compression_enabled"].value_or(false)) {
-                        int th = serverCfg["server"]["compression_threshold"].value_or(256);
-                        PacketBuffer comp; comp.writeVarInt(0x03); comp.writeVarInt(th);
-                        send_packet_raw(comp.finalize(false, -1, nullptr));
-                        compression_enabled = true;
-                    }
-                    PacketBuffer succ; succ.writeVarInt(0x02); 
-                    succ.writeUUID(get_offline_UUID_128(nickname));
-                    succ.writeString(nickname); 
-                    send_packet(succ);
-                    
-                    state_ = State::PLAY; 
-                    send_join_game();
-                    start_keep_alive_timer();
-                }
-            } 
-            else if (state_ == State::PLAY) {
-                if (packetID == 0x10) {
-                    reader.readLong();
-                }
-                else if (packetID == 0x00) { // Teleport Confirm
-                    // packet_update_view_position: 0x41
-                    PacketBuffer vp; 
-                    vp.writeVarInt(0x40); 
-                    vp.writeVarInt(0); 
-                    vp.writeVarInt(0); 
-                    send_packet(vp);
-
-                    World& world = server.get_world();
-                    for (int x = -2; x <= 2; ++x) {
-                        for (int z = -2; z <= 2; ++z) {
-                            ChunkColumn* chunk = world.generateChunk(x, z);
-                            PacketBuffer cp; 
-                            // packet_map_chunk: 0x21
-                            cp.writeVarInt(0x20); 
-                            auto p = chunk->serialize();
-                            cp.data.insert(cp.data.end(), p.begin(), p.end());
-                            send_packet(cp);
-                        }
-                    }
-                }
-                else if (packetID == 0x04) { // Client Status
-                    int action = reader.readVarInt();
-                    if (action == 0) { 
-                        LOG_DEBUG("Player requested respawn.");
-                        
-                        // packet_respawn: 0x3A
-                        PacketBuffer rb;
-                        rb.writeVarInt(0x39); 
-                        rb.writeNbt(server.get_world().getDimension()); 
-                        rb.writeString("minecraft:overworld"); 
-                        rb.writeLong(0); 
-                        rb.writeByte(1); 
-                        rb.writeByte(255); 
-                        rb.writeBoolean(false); 
-                        rb.writeBoolean(false); 
-                        rb.writeBoolean(true); 
-                        send_packet(rb);
-
-                        teleport_to_spawn();
-                    }
-                }
-                else if (packetID >= 0x12 && packetID <= 0x15) {
-                    double x, y, z;
-                    bool onGround;
-                    
-                    if (packetID == 0x12) { 
-                        x = reader.readDouble(); y = reader.readDouble(); z = reader.readDouble();
-                        onGround = reader.readBoolean();
-                    }
-                    else if (packetID == 0x13) { 
-                        x = reader.readDouble(); y = reader.readDouble(); z = reader.readDouble();
-                        reader.readFloat(); reader.readFloat(); 
-                        onGround = reader.readBoolean();
-                    }
-                    else if (packetID == 0x14) { 
-                        reader.readFloat(); reader.readFloat(); 
-                        onGround = reader.readBoolean();
-                        y = 0;
-                    }
-                    else if (packetID == 0x15) { 
-                        onGround = reader.readBoolean();
-                        y = 0;
-                    }
-
-                    if (!is_dead && (packetID == 0x12 || packetID == 0x13) && y < -10.0) {
-                        LOG_DEBUG("Player fell below Y=-10, killing...");
-                        kill_player();
-                    }
-                }
+            auto packet = server.get_packet_registry().createPacket(state_, packetID);
+            if (packet) {
+                packet->read(reader);
+                packet->handle(*this);
+            } else {
+                LOG_WARN("Unhandled packet ID: 0x" + std::to_string(packetID) + " in state " + std::to_string((int)state_));
             }
         }
-    } catch (const std::exception& e) { 
-        LOG_ERROR("Packet error: " + std::string(e.what())); 
+    } catch (const std::exception& e) {
+        LOG_ERROR("Packet error: " + std::string(e.what()));
     }
+}
+
+void Connection::send_packet(OutboundPacket& packet) {
+    PacketBuffer buffer;
+    buffer.writeVarInt(packet.getPacketId());
+    packet.write(buffer);
+    send_packet(buffer);
 }
 
 void Connection::send_packet(PacketBuffer& packet) {

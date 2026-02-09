@@ -1,57 +1,50 @@
 #include "../../../include/game/player/PlayerList.h"
 
-Player* PlayerList::get_player(const int id) const {
-    if (id < 0 || id >= maxPlayers)
-        return nullptr;
-
-    return players[id];
+PlayerList& PlayerList::getInstance() {
+    static PlayerList instance;
+    return instance;
 }
 
-void PlayerList::add_player(int id, std::string& nickname, std::string& uuid, std::string& textures) {
-    players[id] = new Player(id, nickname, uuid, textures);
-    playersCount++;
+void PlayerList::addPlayer(std::shared_ptr<Player> player) {
+    std::lock_guard<std::mutex> lock(playersMutex);
+    players.push_back(player);
 }
 
-void PlayerList::add_player(std::string& nickname, std::string& uuid, std::string& textures) {
-    add_player(playersCount, nickname, uuid, textures);
+void PlayerList::removePlayer(int playerId) {
+    std::lock_guard<std::mutex> lock(playersMutex);
+    players.erase(
+        std::remove_if(players.begin(), players.end(),
+                       [playerId](const std::shared_ptr<Player>& player) {
+                           return player->getId() == playerId;
+                       }),
+        players.end());
 }
 
-void PlayerList::remove_player(const int id) {
-    if (id < 0 || id >= maxPlayers)
-        return;
-
-    if (players[id] != nullptr) {
-        delete players[id];
-        players[id] = nullptr;
-        playersCount--;
+std::shared_ptr<Player> PlayerList::getPlayer(int playerId) {
+    std::lock_guard<std::mutex> lock(playersMutex);
+    for (const auto& player : players) {
+        if (player->getId() == playerId) {
+            return player;
+        }
     }
+    return nullptr;
 }
 
-int PlayerList::get_players_count() const {
-    return playersCount;
-}
-
-void PlayerList::set_players_count(const int count) {
-    playersCount = count;
-}
-
-int PlayerList::get_max_players() const {
-    return maxPlayers;
-}
-
-void PlayerList::set_max_players(int count) {
-    auto playersTemp = std::make_unique<Player*[]>(count);
-
-    int copyCount = std::min(maxPlayers, count);
-
-    for (int i = 0; i < copyCount; i++) {
-        playersTemp[i] = players[i];
+std::shared_ptr<Player> PlayerList::getPlayer(const std::string& nickname) {
+    std::lock_guard<std::mutex> lock(playersMutex);
+    for (const auto& player : players) {
+        if (player->getNickname() == nickname) {
+            return player;
+        }
     }
+    return nullptr;
+}
 
-    for (int i = copyCount; i < count; i++) {
-        playersTemp[i] = nullptr;
-    }
+std::vector<std::shared_ptr<Player>> PlayerList::getPlayers() {
+    std::lock_guard<std::mutex> lock(playersMutex);
+    return players;
+}
 
-    maxPlayers = count;
-    players = std::move(playersTemp);
+int PlayerList::getNextPlayerId() {
+    return nextPlayerId++;
 }

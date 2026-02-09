@@ -5,6 +5,15 @@
 #include "../include/crypto/RSA.h"
 #include "../include/utility/ConfigValidator.h"
 #include "../include/game/world/WorldGenerator.h"
+#include "../include/network/packet/handshake/HandshakePacket.h"
+#include "../include/network/packet/status/StatusRequestPacket.h"
+#include "../include/network/packet/status/StatusPingPacket.h"
+#include "../include/network/packet/login/LoginStartPacket.h"
+#include "../include/network/packet/play/BrandPacket.h"
+#include "../include/network/packet/play/KeepAlivePacketPlay.h"
+#include "../include/network/packet/play/TeleportConfirmPacket.h"
+#include "../include/network/packet/play/ClientStatusPacket.h"
+#include "../include/network/packet/play/PlayerPositionPacket.h"
 
 Server* Server::instance;
 
@@ -40,6 +49,8 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
         public_key = std::make_unique<std::vector<uint8_t>>(tempPublicKey);
     }
 
+    register_packets();
+
     LOG_INFO("Server started on " + ip + ":" + std::to_string(port));
     start_accept();
 }
@@ -56,6 +67,10 @@ World& Server::get_world() {
     return *world;
 }
 
+PacketRegistry& Server::get_packet_registry() {
+    return packet_registry_;
+}
+
 std::vector<uint8_t>& Server::get_public_key() const {
     return *public_key;
 }
@@ -65,6 +80,23 @@ std::vector<uint8_t> Server::decrypt_rsa(const std::vector<uint8_t>& data) const
         throw std::runtime_error("RSA is not initialized");
 
     return rsa::decrypt(cur_rsa, data);
+}
+
+void Server::register_packets() {
+    packet_registry_.registerPacket(State::HANDSHAKE, 0x00, []{ return std::make_unique<HandshakePacket>(); });
+
+    packet_registry_.registerPacket(State::STATUS, 0x00, []{ return std::make_unique<StatusRequestPacket>(); });
+    packet_registry_.registerPacket(State::STATUS, 0x01, []{ return std::make_unique<StatusPingPacket>(); });
+
+    packet_registry_.registerPacket(State::LOGIN, 0x00, []{ return std::make_unique<LoginStartPacket>(); });
+
+    packet_registry_.registerPacket(State::PLAY, 0x00, []{ return std::make_unique<TeleportConfirmPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x04, []{ return std::make_unique<ClientStatusPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x10, []{ return std::make_unique<KeepAlivePacketPlay>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x12, []{ return std::make_unique<PlayerPositionPacketFull>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x13, []{ return std::make_unique<PlayerPositionAndRotationPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x14, []{ return std::make_unique<PlayerRotationPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x15, []{ return std::make_unique<PlayerOnGroundPacket>(); });
 }
 
 void Server::start_accept() {

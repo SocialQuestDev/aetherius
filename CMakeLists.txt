@@ -18,9 +18,7 @@ if(Boost_FOUND)
             "include/*.h"
     )
 
-    add_executable(Aetherius ${CORE_SOURCES}
-            src/utility/ConfigValidator.cpp
-            include/utility/ConfigValidator.h)
+    add_executable(Aetherius ${CORE_SOURCES})
 
     target_link_libraries(Aetherius PRIVATE ${Boost_LIBRARIES})
 endif()

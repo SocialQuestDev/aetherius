@@ -1,6 +1,9 @@
 #pragma once
+
 #include "PacketBuffer.h"
+#include "packet/OutboundPacket.h"
 #include "../crypto/AES.h"
+#include "../game/player/Player.h"
 
 #include <memory>
 #include <boost/asio.hpp>
@@ -23,21 +26,26 @@ public:
     static std::shared_ptr<Connection> create(boost::asio::io_context& io_context);
     tcp::socket& socket();
     void start();
+    void setState(State state);
+    State getState() const;
+    void send_packet(PacketBuffer& packet);
+    void send_packet(OutboundPacket& packet);
+    void send_packet_raw(std::vector<uint8_t> packetData);
+
+    void set_compression(bool enabled);
+    void setPlayer(std::shared_ptr<Player> player);
+    std::shared_ptr<Player> getPlayer() const;
+
+    void send_join_game();
+    void start_keep_alive_timer();
 
 private:
     explicit Connection(boost::asio::io_context& io_context);
 
     void do_read();
     void handle_packet(std::vector<uint8_t>& rawData);
-    void process_packets();
-    void send_packet(PacketBuffer& packet);
-    void send_packet_raw(std::vector<uint8_t> packetData);
-    void send_join_game();
     void send_light_data(int chunkX, int chunkZ);
     void send_keep_alive();
-    void start_keep_alive_timer();
-    void kill_player();
-    void teleport_to_spawn();
 
     std::unique_ptr<CryptoState> crypto_state;
     std::unique_ptr<std::vector<uint8_t>> verify_token;
@@ -47,12 +55,12 @@ private:
     bool just_enabled_encryption = false;
     bool compression_enabled = false;
     bool waitingForResponse = false;
-    std::string nickname = "";
     std::vector<uint8_t> stream_buffer_;
     tcp::socket socket_;
     uint8_t buffer_[4096]{};
     State state_ = State::HANDSHAKE;
     uint64_t last_keep_alive_id_;
     boost::asio::steady_timer keep_alive_timer_;
-    bool is_dead = false;
+
+    std::shared_ptr<Player> player;
 };
