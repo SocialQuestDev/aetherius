@@ -8,6 +8,7 @@
 #include "../../../../include/Logger.h"
 #include "../../../../include/network/packet/play/ChatMessagePacket.h"
 #include <cstddef>
+#include <stdexcept>
 
 void LoginStartPacket::handle(Connection& connection) {
     LOG_INFO("Player logging in: " + nickname);
@@ -18,9 +19,18 @@ void LoginStartPacket::handle(Connection& connection) {
 
     if (PlayerList::getInstance().getPlayer(nickname) != nullptr) {
         PacketBuffer alreadyJoinedDisconnect;
-        alreadyJoinedDisconnect.writeVarInt(0x19);
+        
+        alreadyJoinedDisconnect.writeVarInt(0x00);
         alreadyJoinedDisconnect.writeString("{\"text\":\"You are already connected to a server.\", \"color\":\"red\"}");
-        connection.send_packet_raw(alreadyJoinedDisconnect.finalize(false, -1, nullptr));
+
+        connection.send_packet( alreadyJoinedDisconnect);
+
+        try {
+            connection.socket().close();
+        } catch (std::runtime_error& e) {
+            LOG_ERROR("Error closing socket for " + nickname + ": " + e.what());
+        }
+
         return;
     }
 
