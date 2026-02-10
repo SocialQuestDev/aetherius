@@ -4,6 +4,8 @@
 #include <memory>
 
 #include "../../auth/UUID.h"
+#include "../../other/Vector3.h"
+#include "../../other/Vector2.h"
 
 class Connection; // Forward declaration
 
@@ -17,19 +19,16 @@ public:
     std::string getNickname() const;
     std::string getSkin() const;
     std::shared_ptr<Connection> getConnection() const;
-    double getX() const;
-    double getY() const;
-    double getZ() const;
-    float getYaw() const;
-    float getPitch() const;
+    Vector3 getPosition() const;
+    Vector2 getRotation() const;
     float getHealth() const;
     int getFood() const;
     bool isDead() const;
     bool isOnGround() const;
 
     // Setters
-    void setPosition(double x, double y, double z);
-    void setRotation(float yaw, float pitch);
+    void setPosition(const Vector3& position);
+    void setRotation(const Vector2& rotation);
     void setHealth(float health);
     void setFood(int food);
     void setDead(bool dead);
@@ -47,8 +46,8 @@ private:
     std::shared_ptr<Connection> connection;
 
     // Player state
-    double x, y, z;
-    float yaw, pitch;
+    Vector3 position;
+    Vector2 rotation;
     float health;
     int food;
     bool dead;

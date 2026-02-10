@@ -6,6 +6,8 @@
 #include <cstring>
 #include <vector>
 
+#include "../../include/other/Vector3.h"
+
 // read methods...
 uint8_t PacketBuffer::readByte() {
     if (readerIndex >= data.size()) {
@@ -14,12 +16,12 @@ uint8_t PacketBuffer::readByte() {
     return data[readerIndex++];
 }
 
-std::vector<int32_t> PacketBuffer::readPosition() {
+Vector3 PacketBuffer::readPosition() {
     int64_t val = readLong();
     int32_t x = val >> 38;
     int32_t y = val << 52 >> 52;
     int32_t z = val << 26 >> 38;
-    return {x, y, z};
+    return new Vector3(x, y, z);
 }
 
 bool PacketBuffer::readBoolean() {
@@ -39,7 +41,6 @@ int32_t PacketBuffer::readInt() {
     if (readerIndex + 4 > data.size()) {
         throw std::runtime_error("Buffer overflow: readInt");
     }
-    // Приводим каждый байт к uint32_t ПЕРЕД сдвигом, чтобы не потерять биты
     int32_t res = (static_cast<uint32_t>(data[readerIndex]) << 24) |
                   (static_cast<uint32_t>(data[readerIndex + 1]) << 16) |
                   (static_cast<uint32_t>(data[readerIndex + 2]) << 8) |

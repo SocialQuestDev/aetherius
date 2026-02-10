@@ -7,6 +7,8 @@
 #include "../auth/UUID.h"
 #include "../crypto/AES.h"
 
+struct Vector3;
+
 class PacketBuffer {
 public:
     std::vector<uint8_t> data;
@@ -29,7 +31,7 @@ public:
     std::vector<uint8_t> readByteArray();
     UUID readUUID();
     unsigned short readUShort();
-    std::vector<int32_t> readPosition();
+    Vector3 readPosition();
 
     // Write methods
     void writeByte(uint8_t value);
