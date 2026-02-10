@@ -100,6 +100,15 @@ void NbtBuilder::writeTagDouble(const std::string& name, double value) {
     writeDouble(value);
 }
 
+void NbtBuilder::writeLongArray(const std::string& name, const std::vector<int64_t>& data) {
+    writeByte(TAG_LONG_ARRAY);
+    writeString(name);
+    writeInt(data.size());
+    for (int64_t val : data) {
+        writeLong(val);
+    }
+}
+
 void NbtBuilder::startList(const std::string& name, TagType type, int32_t count) {
     writeByte(TAG_LIST);
     writeString(name);

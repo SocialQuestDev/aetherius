@@ -56,6 +56,13 @@ public:
     int x, z;
     std::array<ChunkSection, 16> sections{};
 
+    int getBlock(int x, int y, int z) const {
+        if (y < 0 || y >= 256) return 0; // Air
+        int sectionIndex = y / 16;
+        int blockIndex = (y % 16) * 16 * 16 + z * 16 + x;
+        return sections[sectionIndex].blocks[blockIndex];
+    }
+
     void setBlock(int x, int y, int z, int blockId) {
         if (y < 0 || y >= 256) return;
         int sectionIndex = y / 16;
@@ -106,10 +113,14 @@ public:
         if (mask == 0) mask = 1; 
         buf.writeVarInt(mask);
 
-        // 3. NBT Heightmaps (Исправленный пустой компаунд)
-        buf.writeByte(10); // TAG_Compound
-        buf.writeShort(0); // Пустое имя (длина 0)
-        buf.writeByte(0);  // TAG_End
+        // 3. NBT Heightmaps
+        NbtBuilder heightmapNbt;
+        heightmapNbt.startCompound();
+        std::vector<int64_t> motionBlocking(37, 0);
+        heightmapNbt.writeLongArray("MOTION_BLOCKING", motionBlocking);
+        heightmapNbt.endCompound();
+        buf.writeNbt(heightmapNbt.buffer);
+
 
         // 4. Биомы (Исправлено для 1.16.5)
         buf.writeVarInt(1024); // Длина массива

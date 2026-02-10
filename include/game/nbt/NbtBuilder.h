@@ -32,6 +32,7 @@ public:
     void writeTagLong(const std::string& name, int64_t value);
     void writeTagFloat(const std::string& name, float value);
     void writeTagDouble(const std::string& name, double value);
+    void writeLongArray(const std::string& name, const std::vector<int64_t>& data);
 
     void startList(const std::string& name, TagType type, int32_t count);
     void startListItem();

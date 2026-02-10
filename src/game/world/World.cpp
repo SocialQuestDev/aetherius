@@ -1,5 +1,6 @@
 #include "../../../include/game/world/World.h"
 #include "../../../include/game/nbt/NbtBuilder.h"
+#include <cmath>
 
 World::World(std::unique_ptr<WorldGenerator> generator) : generator(std::move(generator)) {}
 
@@ -18,6 +19,44 @@ ChunkColumn* World::generateChunk(int x, int z) {
     generator->generateChunk(chunk);
     auto [it, success] = chunks.emplace(std::make_pair(x, z), chunk);
     return &it->second;
+}
+
+int World::getBlock(const Vector3& position) {
+    int chunkX = floor(position.x / 16.0);
+    int chunkZ = floor(position.z / 16.0);
+
+    ChunkColumn* chunk = getChunk(chunkX, chunkZ);
+    if (!chunk) {
+        return 0; // Air
+    }
+
+    int blockX = (int)floor(position.x) % 16;
+    int blockY = (int)floor(position.y);
+    int blockZ = (int)floor(position.z) % 16;
+    if (blockX < 0) blockX += 16;
+    if (blockZ < 0) blockZ += 16;
+
+    return chunk->getBlock(blockX, blockY, blockZ);
+}
+
+void World::setBlock(const Vector3& position, int blockId) {
+    int chunkX = floor(position.x / 16.0);
+    int chunkZ = floor(position.z / 16.0);
+
+    ChunkColumn* chunk = getChunk(chunkX, chunkZ);
+    if (!chunk) {
+        // For simplicity, we won't place blocks in unloaded chunks.
+        // A full implementation might load or generate the chunk here.
+        return;
+    }
+
+    int blockX = (int)floor(position.x) % 16;
+    int blockY = (int)floor(position.y);
+    int blockZ = (int)floor(position.z) % 16;
+    if (blockX < 0) blockX += 16;
+    if (blockZ < 0) blockZ += 16;
+
+    chunk->setBlock(blockX, blockY, blockZ, blockId);
 }
 
 std::vector<uint8_t> World::getDimension() {

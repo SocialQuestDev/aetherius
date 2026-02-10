@@ -172,7 +172,7 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
                 packet->read(reader);
                 packet->handle(*this);
             } else {
-                LOG_WARN("Unhandled packet ID: 0x" + std::to_string(packetID) + " in state " + std::to_string((int)state_));
+                LOG_WARN("Unhandled packet ID: " + std::to_string(packetID) + " in state " + std::to_string((int)state_));
             }
         }
     } catch (const std::exception& e) {

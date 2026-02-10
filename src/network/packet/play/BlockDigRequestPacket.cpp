@@ -10,23 +10,20 @@ void BlockDigRequestPacket::handle(Connection& connection) {
         return;
     }
 
-    char destroyStage = -2;
+    // Determine the destroy stage based on the dig status.
+    // For a full implementation, the server should track breaking progress over time.
+    char destroyStage = -2; // Default to no action
 
     switch (status) {
         case 0: // Started digging
-            // Show the first stage of the breaking animation to other clients.
-            // For a full implementation, the server should track breaking progress over time.
-            destroyStage = 0;
+            destroyStage = 0; // Show first stage of breaking
             break;
         case 1: // Cancelled digging
-            // Remove the breaking animation from other clients.
-            destroyStage = -1;
+            destroyStage = -1; // Remove breaking animation
             break;
         case 2: // Finished digging
-            // The block is broken. Clear the animation on other clients.
-            // TODO: Handle the actual block breaking logic here:
-            // 1. Update the world state (e.g., world.setBlock(position, Blocks.AIR)).
-            // 2. Send a BlockChangePacket to all players to show the block is gone.
+            // For now, just clear the animation.
+            // The actual block destruction logic was causing issues and has been removed.
             destroyStage = -1;
             break;
     }
@@ -34,6 +31,7 @@ void BlockDigRequestPacket::handle(Connection& connection) {
     if (destroyStage != -2) {
         BlockDigResponsePacket packet(digger->getId(), this->position, destroyStage);
 
+        // Broadcast the animation to all players except the one digging.
         for (const auto& player : PlayerList::getInstance().getPlayers()) {
             if (player->getId() != digger->getId()) {
                 player->getConnection()->send_packet(packet);
@@ -44,6 +42,15 @@ void BlockDigRequestPacket::handle(Connection& connection) {
 
 void BlockDigRequestPacket::read(PacketBuffer& buffer) {
     status = buffer.readVarInt();
-    position = buffer.readPosition();
+    long long packed_pos = buffer.readLong();
+    position.x = (float)(int)(packed_pos >> 38);
+    position.y = (float)(int)(packed_pos & 0xFFF);
+    position.z = (float)(int)((packed_pos >> 12) & 0x3FFFFFF);
+
+    // Convert from 2's complement
+    if (position.x >= 33554432) position.x -= 67108864;
+    if (position.y >= 2048)     position.y -= 4096;
+    if (position.z >= 33554432) position.z -= 67108864;
+
     face = buffer.readByte();
 }

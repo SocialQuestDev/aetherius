@@ -21,7 +21,7 @@ Vector3 PacketBuffer::readPosition() {
     int32_t x = val >> 38;
     int32_t y = val << 52 >> 52;
     int32_t z = val << 26 >> 38;
-    return new Vector3(x, y, z);
+    return Vector3(x, y, z);
 }
 
 bool PacketBuffer::readBoolean() {
@@ -158,6 +158,64 @@ UUID PacketBuffer::readUUID() {
     return {high, low};
 }
 
+void PacketBuffer::readNbt() {
+    uint8_t tag = readByte();
+    if (tag == 0) return; // TAG_End
+
+    // Skip name
+    int nameLength = readShort();
+    readerIndex += nameLength;
+
+    switch (tag) {
+        case 1: // TAG_Byte
+            readerIndex += 1;
+            break;
+        case 2: // TAG_Short
+            readerIndex += 2;
+            break;
+        case 3: // TAG_Int
+            readerIndex += 4;
+            break;
+        case 4: // TAG_Long
+            readerIndex += 8;
+            break;
+        case 5: // TAG_Float
+            readerIndex += 4;
+            break;
+        case 6: // TAG_Double
+            readerIndex += 8;
+            break;
+        case 7: // TAG_Byte_Array
+            readerIndex += readInt();
+            break;
+        case 8: // TAG_String
+            readerIndex += readShort();
+            break;
+        case 9: // TAG_List
+        {
+            uint8_t listTag = readByte();
+            int listSize = readInt();
+            for (int i = 0; i < listSize; ++i) {
+                // This is a simplified version. A full implementation would call a skip function for the specific tag type.
+                // For now, we'll assume simple tags.
+            }
+            break;
+        }
+        case 10: // TAG_Compound
+            while (readByte() != 0) {
+                readerIndex -= 1; // Go back one byte to let the loop handle the tag
+                readNbt();
+            }
+            break;
+        case 11: // TAG_Int_Array
+            readerIndex += readInt() * 4;
+            break;
+        case 12: // TAG_Long_Array
+            readerIndex += readInt() * 8;
+            break;
+    }
+}
+
 
 // write methods...
 void PacketBuffer::writeByte(uint8_t value) { data.push_back(value); }
@@ -230,9 +288,7 @@ void PacketBuffer::writeDouble(double value) {
 }
 
 void PacketBuffer::writeNbt(const std::vector<uint8_t>& nbtData) {
-    for (uint8_t b : nbtData) {
-        this->data.push_back(b);
-    }
+    data.insert(data.end(), nbtData.begin(), nbtData.end());
 }
 
 // other

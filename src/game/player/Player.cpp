@@ -9,7 +9,8 @@
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
     : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),
-      position(0.0, 7.0, 0.0), rotation(0.0f, 0.0f), health(20.0f), food(20), dead(false), onGround(false) {}
+      position(0.0, 7.0, 0.0), rotation(0.0f, 0.0f), health(20.0f), food(20), dead(false), onGround(false),
+      heldItemSlot(0), inventory(46), flying(false), viewDistance(8), sneaking(false), sprinting(false) {}
 
 int Player::getId() const {
     return id;
@@ -55,6 +56,30 @@ bool Player::isOnGround() const {
     return onGround;
 }
 
+short Player::getHeldItemSlot() const {
+    return heldItemSlot;
+}
+
+const std::vector<ItemStack>& Player::getInventory() const {
+    return inventory;
+}
+
+bool Player::isFlying() const {
+    return flying;
+}
+
+uint8_t Player::getViewDistance() const {
+    return viewDistance;
+}
+
+bool Player::isSneaking() const {
+    return sneaking;
+}
+
+bool Player::isSprinting() const {
+    return sprinting;
+}
+
 void Player::setPosition(const Vector3& position) {
     this->position = position;
 }
@@ -77,6 +102,32 @@ void Player::setDead(bool dead) {
 
 void Player::setOnGround(bool onGround) {
     this->onGround = onGround;
+}
+
+void Player::setHeldItemSlot(short slot) {
+    this->heldItemSlot = slot;
+}
+
+void Player::setInventorySlot(int slot, const ItemStack& item) {
+    if (slot >= 0 && slot < inventory.size()) {
+        inventory[slot] = item;
+    }
+}
+
+void Player::setFlying(bool flying) {
+    this->flying = flying;
+}
+
+void Player::setViewDistance(uint8_t viewDistance) {
+    this->viewDistance = viewDistance;
+}
+
+void Player::setSneaking(bool sneaking) {
+    this->sneaking = sneaking;
+}
+
+void Player::setSprinting(bool sprinting) {
+    this->sprinting = sprinting;
 }
 
 void Player::kill() {
@@ -102,6 +153,9 @@ void Player::teleportToSpawn() {
     position = Vector3(0.0, 75.0, 0.0);
     rotation = Vector2(0.0f, 0.0f);
     onGround = false;
+    flying = false;
+    sneaking = false;
+    sprinting = false;
 
     UpdateHealthPacket healthPacket(health, food, 5.0f);
     connection->send_packet(healthPacket);

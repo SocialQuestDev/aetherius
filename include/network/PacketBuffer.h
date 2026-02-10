@@ -32,6 +32,7 @@ public:
     UUID readUUID();
     unsigned short readUShort();
     Vector3 readPosition();
+    void readNbt();
 
     // Write methods
     void writeByte(uint8_t value);

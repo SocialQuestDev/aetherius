@@ -15,6 +15,14 @@
 #include "../include/network/packet/play/ClientStatusPacket.h"
 #include "../include/network/packet/play/GetChatMessagePacket.h"
 #include "../include/network/packet/play/PlayerPositionPacket.h"
+#include "../include/network/packet/play/BlockDigRequestPacket.h"
+#include "../include/network/packet/play/HeldItemChangePacket.h"
+#include "../include/network/packet/play/SetCreativeSlotPacket.h"
+#include "../include/network/packet/play/ArmAnimationPacket.h"
+#include "../include/network/packet/play/BlockPlacePacket.h"
+#include "../include/network/packet/play/ClientAbilitiesPacket.h"
+#include "../include/network/packet/play/EntityActionPacket.h"
+#include "../include/network/packet/play/ClientSettingsPacket.h"
 
 Server* Server::instance;
 
@@ -95,11 +103,19 @@ void Server::register_packets() {
     packet_registry_.registerPacket(State::PLAY, 0x00, []{ return std::make_unique<TeleportConfirmPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x03, []{ return std::make_unique<GetChatMessagePacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x04, []{ return std::make_unique<ClientStatusPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x05, []{ return std::make_unique<ClientSettingsPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x10, []{ return std::make_unique<KeepAlivePacketPlay>(); });
     packet_registry_.registerPacket(State::PLAY, 0x12, []{ return std::make_unique<PlayerPositionPacketFull>(); });
     packet_registry_.registerPacket(State::PLAY, 0x13, []{ return std::make_unique<PlayerPositionAndRotationPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x14, []{ return std::make_unique<PlayerRotationPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x15, []{ return std::make_unique<PlayerOnGroundPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x1A, []{ return std::make_unique<ClientAbilitiesPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x1C, []{ return std::make_unique<EntityActionPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x1b, []{ return std::make_unique<BlockDigRequestPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x25, []{ return std::make_unique<HeldItemChangePacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x28, []{ return std::make_unique<SetCreativeSlotPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x2C, []{ return std::make_unique<ArmAnimationPacket>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x2E, []{ return std::make_unique<BlockPlacePacket>(); });
 }
 
 void Server::start_accept() {

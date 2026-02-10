@@ -2,12 +2,19 @@
 
 #include <string>
 #include <memory>
+#include <vector>
 
 #include "../../auth/UUID.h"
 #include "../../other/Vector3.h"
 #include "../../other/Vector2.h"
 
 class Connection; // Forward declaration
+
+// Placeholder for an item stack
+struct ItemStack {
+    int itemId = 0;
+    int count = 0;
+};
 
 class Player {
 public:
@@ -25,6 +32,12 @@ public:
     int getFood() const;
     bool isDead() const;
     bool isOnGround() const;
+    short getHeldItemSlot() const;
+    const std::vector<ItemStack>& getInventory() const;
+    bool isFlying() const;
+    uint8_t getViewDistance() const;
+    bool isSneaking() const;
+    bool isSprinting() const;
 
     // Setters
     void setPosition(const Vector3& position);
@@ -33,6 +46,13 @@ public:
     void setFood(int food);
     void setDead(bool dead);
     void setOnGround(bool onGround);
+    void setHeldItemSlot(short slot);
+    void setInventorySlot(int slot, const ItemStack& item);
+    void setFlying(bool flying);
+    void setViewDistance(uint8_t viewDistance);
+    void setSneaking(bool sneaking);
+    void setSprinting(bool sprinting);
+
 
     // Actions
     void kill();
@@ -52,4 +72,10 @@ private:
     int food;
     bool dead;
     bool onGround;
+    short heldItemSlot;
+    std::vector<ItemStack> inventory;
+    bool flying;
+    uint8_t viewDistance;
+    bool sneaking;
+    bool sprinting;
 };
