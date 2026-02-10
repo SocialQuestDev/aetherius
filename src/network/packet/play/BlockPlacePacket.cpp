@@ -7,7 +7,6 @@
 #include "../../../../include/network/packet/play/BlockChangePacket.h"
 #include "../../../../include/Logger.h"
 #include "../../../../include/utility/MinecraftRegistry.hpp"
-
 void BlockPlacePacket::handle(Connection& connection) {
     auto player = connection.getPlayer();
     if (!player) return;
@@ -18,33 +17,65 @@ void BlockPlacePacket::handle(Connection& connection) {
     const RegistryEntry* itemInfo = MinecraftRegistry::getByItemId(heldItem.itemId);
     if (!itemInfo || itemInfo->stateId == -1) return;
 
-    // 1. Корректируем позицию (пакет присылает координаты блока, НА который нажали)
+    // 1. Вычисляем позицию установки
     Vector3 placePos = position;
     switch (face) {
-        case 0: placePos.y--; break; // Bottom
-        case 1: placePos.y++; break; // Top (твой случай)
-        case 2: placePos.z--; break; // North
-        case 3: placePos.z++; break; // South
-        case 4: placePos.x--; break; // West
-        case 5: placePos.x++; break; // East
+        case 0: placePos.y--; break;
+        case 1: placePos.y++; break;
+        case 2: placePos.z--; break;
+        case 3: placePos.z++; break;
+        case 4: placePos.x--; break;
+        case 5: placePos.x++; break;
         default: break; 
     }
 
-    // 2. Используем stateId для установки и рассылки
-    // В 1.13+ blockId 687 — это Note Block, а Warped Nylium имеет stateId ~15000
-    int finalStateId = itemInfo->stateId;
+    // --- НОВАЯ ЛОГИКА ПРОВЕРКИ КОЛЛИЗИЙ ---
 
+    // Определяем границы нового блока (куб 1x1x1)
+    double minX = (double)placePos.x;
+    double minY = (double)placePos.y;
+    double minZ = (double)placePos.z;
+    double maxX = minX + 1.0;
+    double maxY = minY + 1.0;
+    double maxZ = minZ + 1.0;
+
+    // Проверяем всех игроков
+    for (const auto& p : PlayerList::getInstance().getPlayers()) {
+        Vector3 pPos = p->getPosition();
+        // Размеры игрока в Minecraft примерно 0.6 в ширину и 1.8 в высоту
+        double pMinX = pPos.x - 0.3;
+        double pMaxX = pPos.x + 0.3;
+        double pMinY = pPos.y;
+        double pMaxY = pPos.y + 1.8;
+        double pMinZ = pPos.z - 0.3;
+        double pMaxZ = pPos.z + 0.3;
+
+        // Проверка пересечения AABB
+        bool intersects = (minX < pMaxX && maxX > pMinX) &&
+                          (minY < pMaxY && maxY > pMinY) &&
+                          (minZ < pMaxZ && maxZ > pMinZ);
+
+        if (intersects) {
+            LOG_DEBUG("Cannot place block: Player " + p->getNickname() + " is in the way!");
+            
+            // Важно: отправляем пакет BlockChange для старого блока, 
+            // чтобы у клиента "исчез" призрачный блок, который он поставил локально
+            int oldStateId = Server::get_instance().get_world().getBlock(placePos);
+            BlockChangePacket revertPacket(placePos, oldStateId);
+            connection.send_packet(revertPacket);
+            return; 
+        }
+    }
+
+    // --- КОНЕЦ ПРОВЕРКИ ---
+
+    int finalStateId = itemInfo->stateId;
     Server::get_instance().get_world().setBlock(placePos, finalStateId);
 
-    // Рассылаем пакет изменения блока всем игрокам
     BlockChangePacket packet(placePos, finalStateId);
     for (const auto& p : PlayerList::getInstance().getPlayers()) {
         p->getConnection()->send_packet(packet);
     }
-
-    LOG_DEBUG("Player " + player->getNickname() + " placed " + itemInfo->name + 
-              " (State: " + std::to_string(finalStateId) + ") at " + 
-              std::to_string(placePos.x) + " " + std::to_string(placePos.y) + " " + std::to_string(placePos.z));
 }
 
 void BlockPlacePacket::read(PacketBuffer& buffer) {
