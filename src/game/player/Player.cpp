@@ -163,7 +163,7 @@ void Player::teleportToSpawn() {
     UpdateHealthPacket healthPacket(health, food, 5.0f);
     connection->send_packet(healthPacket);
 
-    PlayerPositionAndLookPacket posLookPacket(position.x, position.y, position.z, rotation.x, rotation.y, 0x00, 1);
+    PlayerPositionAndLookPacket posLookPacket(position.x, position.y, position.z, rotation.x, rotation.y, 0x00, id);
     connection->send_packet(posLookPacket);
 
     LOG_DEBUG("Player " + nickname + " teleported to spawn and healed");

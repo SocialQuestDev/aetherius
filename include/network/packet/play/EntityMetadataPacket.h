@@ -7,7 +7,7 @@ class Player; // Forward declaration
 class EntityMetadataPacket : public OutboundPacket {
 public:
     EntityMetadataPacket(const Player& player);
-    int getPacketId() const override { return 0x4D; }
+    int getPacketId() const override { return 0x44; }
     void write(PacketBuffer& buffer) override;
 
 private:

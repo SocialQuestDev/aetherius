@@ -5,7 +5,7 @@
 class EntityEquipmentPacket : public OutboundPacket {
 public:
     EntityEquipmentPacket(int entityId, int slot, const Slot& item);
-    int getPacketId() const override { return 0x50; } // Packet ID for Entity Equipment
+    int getPacketId() const override { return 0x47; }
     void write(PacketBuffer& buffer) override;
 
 private:

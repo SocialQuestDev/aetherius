@@ -4,7 +4,7 @@
 class EntityAnimationPacket : public OutboundPacket {
 public:
     EntityAnimationPacket(int entityId, int animation);
-    int getPacketId() const override { return 0x06; } // Packet ID for Entity Animation
+    int getPacketId() const override { return 0x05; }
     void write(PacketBuffer& buffer) override;
 
 private:

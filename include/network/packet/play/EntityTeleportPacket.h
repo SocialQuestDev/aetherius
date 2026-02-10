@@ -5,7 +5,7 @@
 class EntityTeleportPacket : public OutboundPacket {
 public:
     EntityTeleportPacket(int entityId, const Vector3& position, float yaw, float pitch, bool onGround);
-    int getPacketId() const override { return 0x62; } // Packet ID for Entity Teleport
+    int getPacketId() const override { return 0x56; } // Packet ID for Entity Teleport
     void write(PacketBuffer& buffer) override;
 
 private:

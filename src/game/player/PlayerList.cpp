@@ -1,6 +1,9 @@
 #include "../../../include/game/player/PlayerList.h"
 #include "../../../include/network/packet/play/PlayerInfoPacket.h"
+#include "../../../include/network/packet/play/SpawnNamedEntityPacket.h"
+#include "../../../include/network/packet/play/EntityMetadataPacket.h"
 #include "../../../include/network/Connection.h"
+#include "../../../include/game/player/Player.h"
 
 PlayerList& PlayerList::getInstance() {
     static PlayerList instance;
@@ -17,23 +20,19 @@ void PlayerList::removePlayer(int playerId) {
     {
         std::lock_guard<std::mutex> lock(playersMutex);
         
-        // 1. Ищем игрока (используем итератор напрямую)
-        auto it = std::find_if(players.begin(), players.end(), 
+        auto it = std::find_if(players.begin(), players.end(),
             [playerId](const auto& p) { return p->getId() == playerId; });
 
-        if (it == players.end()) return; // Игрок не найден
+        if (it == players.end()) return;
 
         playerToRemove = *it;
 
-        // 2. Рассылаем пакет остальным (пока мьютекс захвачен, чтобы список не изменился)
         PlayerInfoPacket removePacket(PlayerInfoPacket::REMOVE_PLAYER, {playerToRemove});
         for (const auto& p : players) {
             if (p->getId() != playerId) {
                 p->getConnection()->send_packet(removePacket);
             }
         }
-
-        // 3. Удаляем из вектора
         players.erase(it);
     } 
 }
@@ -64,5 +63,5 @@ std::vector<std::shared_ptr<Player>> PlayerList::getPlayers() {
 }
 
 int PlayerList::getNextPlayerId() {
-    return ++nextPlayerId;
+    return nextPlayerId++;
 }
