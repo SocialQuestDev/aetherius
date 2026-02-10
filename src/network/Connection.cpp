@@ -217,6 +217,8 @@ void Connection::send_join_game() {
     BrandPacket brand("Aetherius");
     send_packet(brand);
 
+    player->teleportToSpawn();
+
     if (!PlayerList::getInstance().getPlayers().empty()) {
         PlayerInfoPacket newPlayerPacket(PlayerInfoPacket::ADD_PLAYER, {player}); //govnokod by like
         for (const auto& p : PlayerList::getInstance().getPlayers()) {
