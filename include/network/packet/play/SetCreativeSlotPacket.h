@@ -1,6 +1,6 @@
 #pragma once
 #include "../InboundPacket.h"
-#include "../../../game/player/Player.h" // For ItemStack
+#include "../../../game/player/Player.h" // For Slot
 
 class SetCreativeSlotPacket : public InboundPacket {
 public:
@@ -10,5 +10,5 @@ public:
 
 private:
     short slot;
-    ItemStack item;
+    Slot item;
 };

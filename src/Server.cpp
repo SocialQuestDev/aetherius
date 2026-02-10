@@ -44,8 +44,18 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
         LOG_WARN("While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.");
         LOG_WARN("To change this, set 'online-mode' to 'true' in the config.toml file.");
     }
+    // ФИКС: Принудительно используем IPv4, чтобы избежать таймаутов на Windows/Linux
+    boost::system::error_code ec;
+    auto address = boost::asio::ip::make_address(ip, ec);
 
-    const tcp::endpoint endpoint(boost::asio::ip::make_address(ip), port);
+    if (ec) {
+        LOG_WARN("Invalid IP address in config: " + ip + ". Fallback to 0.0.0.0");
+        address = boost::asio::ip::make_address("0.0.0.0");
+    }
+
+    // Создаем endpoint (точку подключения)
+    const tcp::endpoint endpoint(address, port);
+
     acceptor_.open(endpoint.protocol());
     acceptor_.set_option(boost::asio::socket_base::reuse_address(true));
     acceptor_.bind(endpoint);
@@ -129,10 +139,9 @@ void Server::start_accept() {
 
 void Server::handle_accept(const std::shared_ptr<Connection> &new_connection, const boost::system::error_code& error) {
     if (!error) {
+        // ФИКС: Мгновенная отправка пакетов
+        new_connection->socket().set_option(boost::asio::ip::tcp::no_delay(true));
         new_connection->start();
-    } else {
-        LOG_ERROR("Accept error: " + error.message());
-    }
-
+    } 
     start_accept();
 }

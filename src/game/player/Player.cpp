@@ -60,7 +60,7 @@ short Player::getHeldItemSlot() const {
     return heldItemSlot;
 }
 
-const std::vector<ItemStack>& Player::getInventory() const {
+const std::vector<Slot>& Player::getInventory() const {
     return inventory;
 }
 
@@ -108,7 +108,7 @@ void Player::setHeldItemSlot(short slot) {
     this->heldItemSlot = slot;
 }
 
-void Player::setInventorySlot(int slot, const ItemStack& item) {
+void Player::setInventorySlot(int slot, const Slot& item) {
     if (slot >= 0 && slot < inventory.size()) {
         inventory[slot] = item;
     }

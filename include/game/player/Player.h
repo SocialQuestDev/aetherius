@@ -11,7 +11,7 @@
 class Connection; // Forward declaration
 
 // Placeholder for an item stack
-struct ItemStack {
+struct Slot {
     int itemId = 0;
     int count = 0;
 };
@@ -33,7 +33,7 @@ public:
     bool isDead() const;
     bool isOnGround() const;
     short getHeldItemSlot() const;
-    const std::vector<ItemStack>& getInventory() const;
+    const std::vector<Slot>& getInventory() const;
     bool isFlying() const;
     uint8_t getViewDistance() const;
     bool isSneaking() const;
@@ -47,7 +47,7 @@ public:
     void setDead(bool dead);
     void setOnGround(bool onGround);
     void setHeldItemSlot(short slot);
-    void setInventorySlot(int slot, const ItemStack& item);
+    void setInventorySlot(int slot, const Slot& item);
     void setFlying(bool flying);
     void setViewDistance(uint8_t viewDistance);
     void setSneaking(bool sneaking);
@@ -73,7 +73,7 @@ private:
     bool dead;
     bool onGround;
     short heldItemSlot;
-    std::vector<ItemStack> inventory;
+    std::vector<Slot> inventory;
     bool flying;
     uint8_t viewDistance;
     bool sneaking;

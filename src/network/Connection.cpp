@@ -34,7 +34,12 @@ std::shared_ptr<Connection> Connection::create(boost::asio::io_context& io_conte
 
 tcp::socket& Connection::socket() { return socket_; }
 
-void Connection::start() { do_read(); }
+void Connection::start() { 
+    // Гарантируем отсутствие задержек Nagle
+    boost::system::error_code ec;
+    socket_.set_option(boost::asio::ip::tcp::no_delay(true), ec);
+    do_read(); 
+}
 
 void Connection::setState(State state) {
     state_ = state;
@@ -91,21 +96,143 @@ void Connection::enable_encryption(const std::vector<uint8_t>& shared_secret) {
 
 void Connection::do_read() {
     auto self(shared_from_this());
+    
+    // Читаем сколько есть в сети (хоть 1 байт, хоть 1000)
     socket_.async_read_some(boost::asio::buffer(buffer_),
         [this, self](const boost::system::error_code &ec, const std::size_t length) {
             if (!ec) {
-                std::vector<uint8_t> received(buffer_, buffer_ + length);
-                if (encrypt && crypto_state) aes::decrypt(*crypto_state, received.data(), (int)received.size());
-                try { handle_packet(received); }
-                catch (std::exception& e) { LOG_ERROR("Packet parsing error: " + std::string(e.what())); }
+                // 1. Если есть шифрование - дешифруем прочитанный кусок СРАЗУ
+                if (encrypt && crypto_state) {
+                    aes::decrypt(*crypto_state, buffer_, length);
+                }
+
+                // 2. Добавляем прочитанные данные в наш "умный" накопительный буфер
+                incoming_buffer_.insert(incoming_buffer_.end(), buffer_, buffer_ + length);
+
+                // 3. Пытаемся "нарезать" буфер на пакеты
+                process_incoming_buffer();
+
+                // 4. Читаем дальше
                 do_read();
             } else {
-                if (player) {
-                    PlayerList::getInstance().removePlayer(player->getId());
-                }
-                LOG_DEBUG("Connection closed: " + ec.message());
+                // Обработка отключения
+                if (player) PlayerList::getInstance().removePlayer(player->getId());
             }
         });
+}
+
+void Connection::process_incoming_buffer() {
+    try {
+        Server& server = Server::get_instance();
+        
+        while (true) {
+            // Если буфер пуст, ждать нечего
+            if (incoming_buffer_.empty()) break;
+
+            PacketBuffer raw(incoming_buffer_); // Создаем "читалку" поверх вектора
+            
+            // Попытка прочитать длину пакета (VarInt)
+            // Важно: readVarInt должен не крашиться, если данных мало, а кидать исключение или возвращать ошибку
+            // Но допустим, твой PacketBuffer просто читает. Нам нужно проверить, хватает ли байт.
+            
+            // ХАК: Быстрая проверка VarInt без сдвига readerIndex, чтобы не испортить буфер, если данных мало
+            // (В идеале твой PacketBuffer должен уметь `peekVarInt`)
+            int varIntLen = 0;
+            int packetLength = 0;
+            
+            // Ручной парсинг VarInt для проверки длины
+            size_t i = 0;
+            int numRead = 0;
+            int result = 0;
+            bool incompleteVarInt = true;
+            
+            for(i = 0; i < incoming_buffer_.size() && i < 5; i++) {
+                uint8_t read = incoming_buffer_[i];
+                int value = (read & 0b01111111);
+                result |= (value << (7 * numRead));
+                numRead++;
+                if ((read & 0b10000000) == 0) {
+                    packetLength = result;
+                    varIntLen = numRead;
+                    incompleteVarInt = false;
+                    break;
+                }
+            }
+
+            if (incompleteVarInt) {
+                // Мы еще не получили даже длину пакета целиком. Ждем.
+                return; 
+            }
+
+            // Проверяем, пришел ли весь пакет целиком
+            // Длина всего пакета = (размер VarInt длины) + (сами данные)
+            if (incoming_buffer_.size() < (varIntLen + packetLength)) {
+                // Пакет пришел не полностью (например, только половина чанка). Ждем добавки.
+                return; 
+            }
+
+            // === ПАКЕТ ПОЛНОСТЬЮ У НАС ===
+            
+            // Вырезаем данные пакета (без длины пакета, как это обычно бывает в сжатии, или с ней - зависит от твоей логики)
+            // В Minecraft протоколе: Length | PacketID | Data
+            // Твой код ниже предполагает, что PacketBuffer raw начинает читать сразу
+            
+            // Создаем буфер чисто для этого пакета
+            std::vector<uint8_t> packetData;
+            
+            // Сдвигаем сырой итератор на длину поля Length
+            auto dataStart = incoming_buffer_.begin() + varIntLen;
+            auto dataEnd = dataStart + packetLength;
+            
+            packetData.assign(dataStart, dataEnd);
+
+            // Обработка пакета (логика, вырезанная из твоего старого handle_packet)
+            // -------------------------------------------------------------------
+            PacketBuffer reader(packetData);
+            
+            // Логика декомпрессии
+            std::vector<uint8_t> payload;
+            if (compression_enabled) {
+                int dataLength = reader.readVarInt();
+                if (dataLength > 0) {
+                    // Нужно разжать
+                    payload.resize(dataLength);
+                    uLongf destLen = dataLength;
+                    // Исправь смещение: reader.readerIndex уже сдвинут после readVarInt
+                    auto compressedDataStart = packetData.data() + reader.readerIndex;
+                    int compressedSize = packetData.size() - reader.readerIndex;
+                    
+                    uncompress(payload.data(), &destLen, compressedDataStart, compressedSize);
+                } else {
+                    // Не сжат (dataLength == 0)
+                     payload.assign(packetData.begin() + reader.readerIndex, packetData.end());
+                }
+            } else {
+                payload = packetData; // Без сжатия берем как есть
+            }
+
+            // Создаем пакет
+            PacketBuffer packetReader(payload);
+            int packetID = packetReader.readVarInt();
+            auto packet = server.get_packet_registry().createPacket(state_, packetID);
+            
+            if (packet) {
+                packet->read(packetReader);
+                packet->handle(*this); // Вызываем обработчик
+            }
+            // -------------------------------------------------------------------
+
+            // УДАЛЯЕМ ОБРАБОТАННЫЙ ПАКЕТ ИЗ БУФЕРА
+            incoming_buffer_.erase(incoming_buffer_.begin(), incoming_buffer_.begin() + varIntLen + packetLength);
+            
+            // Цикл while(true) продолжается, пытаясь найти следующий пакет в буфере
+        }
+
+    } catch (const std::exception& e) {
+        LOG_ERROR("Buffer processing error: " + std::string(e.what()));
+        // При ошибке лучше закрыть соединение, чтобы не зациклиться
+        socket_.close();
+    }
 }
 
 void Connection::start_keep_alive_timer() {

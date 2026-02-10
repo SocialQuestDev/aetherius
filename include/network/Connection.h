@@ -78,4 +78,7 @@ private:
     boost::asio::steady_timer keep_alive_timer_;
 
     std::shared_ptr<Player> player;
+    // Добавь это в секцию private:
+    std::vector<uint8_t> incoming_buffer_; // Буфер для склейки кусков пакетов
+    void process_incoming_buffer();        // Метод для нарезки потока на пакеты
 };

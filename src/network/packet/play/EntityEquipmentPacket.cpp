@@ -1,7 +1,7 @@
 #include "../../../../include/network/packet/play/EntityEquipmentPacket.h"
 #include "../../../../include/network/PacketBuffer.h"
 
-EntityEquipmentPacket::EntityEquipmentPacket(int entityId, int slot, const ItemStack& item)
+EntityEquipmentPacket::EntityEquipmentPacket(int entityId, int slot, const Slot& item)
     : entityId(entityId), slot(slot), item(item) {}
 
 void EntityEquipmentPacket::write(PacketBuffer& buffer) {
