@@ -3,6 +3,8 @@
 #include "../../../../include/network/Connection.h"
 #include "../../../../include/game/player/Player.h"
 #include "../../../../include/network/packet/play/BlockDigResponsePacket.h"
+#include "../../../../include/network/packet/play/BlockChangePacket.h"
+#include "../../../../include/utility/MinecraftRegistry.hpp"
 
 void BlockDigRequestPacket::handle(Connection& connection) {
     std::shared_ptr<Player> digger = connection.getPlayer();
@@ -24,14 +26,16 @@ void BlockDigRequestPacket::handle(Connection& connection) {
         case 2: // Finished digging
             // For now, just clear the animation.
             // The actual block destruction logic was causing issues and has been removed.
-            destroyStage = -1;
+            destroyStage = 1;
             break;
     }
 
     BlockDigResponsePacket packet(digger->getId(), this->position, destroyStage);
+    BlockChangePacket blockChangePacket(this->position, 0);
     for (const auto& player : PlayerList::getInstance().getPlayers()) {
         if (player->getId() != digger->getId()) {
             player->getConnection()->send_packet(packet);
+            player->getConnection()->send_packet(blockChangePacket);
         }
     }
 }

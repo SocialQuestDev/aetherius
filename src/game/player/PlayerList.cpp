@@ -12,22 +12,30 @@ void PlayerList::addPlayer(std::shared_ptr<Player> newPlayer) {
 }
 
 void PlayerList::removePlayer(int playerId) {
-    std::lock_guard<std::mutex> lock(playersMutex);
+    std::shared_ptr<Player> playerToRemove;
+    
+    {
+        std::lock_guard<std::mutex> lock(playersMutex);
+        
+        // 1. Ищем игрока (используем итератор напрямую)
+        auto it = std::find_if(players.begin(), players.end(), 
+            [playerId](const auto& p) { return p->getId() == playerId; });
 
-    auto playerIt = std::find_if(players.begin(), players.end(),
-                                 [playerId](const std::shared_ptr<Player>& player) {
-                                     return player->getId() == playerId;
-                                 });
+        if (it == players.end()) return; // Игрок не найден
 
-    if (playerIt != players.end()) {
-        PlayerInfoPacket removePacket(PlayerInfoPacket::REMOVE_PLAYER, {*playerIt});
+        playerToRemove = *it;
+
+        // 2. Рассылаем пакет остальным (пока мьютекс захвачен, чтобы список не изменился)
+        PlayerInfoPacket removePacket(PlayerInfoPacket::REMOVE_PLAYER, {playerToRemove});
         for (const auto& p : players) {
             if (p->getId() != playerId) {
                 p->getConnection()->send_packet(removePacket);
             }
         }
-        players.erase(playerIt);
-    }
+
+        // 3. Удаляем из вектора
+        players.erase(it);
+    } 
 }
 
 std::shared_ptr<Player> PlayerList::getPlayer(int playerId) {
@@ -56,6 +64,5 @@ std::vector<std::shared_ptr<Player>> PlayerList::getPlayers() {
 }
 
 int PlayerList::getNextPlayerId() {
-    nextPlayerId =+ 1;
-    return nextPlayerId;
+    return ++nextPlayerId;
 }

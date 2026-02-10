@@ -235,6 +235,7 @@ void Connection::process_incoming_buffer() {
         LOG_ERROR("Buffer processing error: " + std::string(e.what()));
         // При ошибке лучше закрыть соединение, чтобы не зациклиться
         socket_.close();
+        if (player) PlayerList::getInstance().removePlayer(player->getId());
     }
 }
 
