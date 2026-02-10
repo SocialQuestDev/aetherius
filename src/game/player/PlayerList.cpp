@@ -8,21 +8,7 @@ PlayerList& PlayerList::getInstance() {
 }
 
 void PlayerList::addPlayer(std::shared_ptr<Player> newPlayer) {
-    std::lock_guard<std::mutex> lock(playersMutex);
-
-    // 1. Notify all *other* players that the new player is joining.
-    PlayerInfoPacket newPlayerPacket(PlayerInfoPacket::ADD_PLAYER, {newPlayer});
-    for (const auto& p : players) {
-        p->getConnection()->send_packet(newPlayerPacket);
-    }
-
     players.push_back(newPlayer);
-
-    // 2. Send the complete list of all players (excluding the new one) to the new player.
-    if (!players.empty()) {
-        PlayerInfoPacket allPlayersPacket(PlayerInfoPacket::ADD_PLAYER, players);
-        newPlayer->getConnection()->send_packet(allPlayersPacket);
-    }
 }
 
 void PlayerList::removePlayer(int playerId) {

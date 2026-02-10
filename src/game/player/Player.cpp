@@ -1,11 +1,14 @@
 #include "../../../include/game/player/Player.h"
+#include "../../../include/game/player/PlayerList.h"
 #include "../../../include/network/Connection.h"
 #include "../../../include/network/packet/play/UpdateHealthPacket.h"
 #include "../../../include/network/packet/play/PlayerPositionAndLookPacket.h"
 #include "../../../include/network/packet/play/EntityStatusPacket.h"
 #include "../../../include/network/packet/play/ChatMessagePacket.h"
+#include "../../../include/network/packet/play/PlayerInfoPacket.h"
 #include "../../../include/auth/MojangAuthHelper.h"
 #include "../../../include/Logger.h"
+#include <memory>
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
     : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),

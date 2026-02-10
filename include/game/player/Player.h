@@ -57,7 +57,6 @@ public:
     // Actions
     void kill();
     void teleportToSpawn();
-
 private:
     int id;
     UUID uuid;

@@ -14,6 +14,7 @@
 #include "../../include/network/packet/play/JoinGamePacket.h"
 #include "../../include/network/packet/play/KeepAlivePacketClientbound.h"
 #include "../../include/network/packet/play/BrandPacket.h"
+#include "../../include/network/packet/play/PlayerInfoPacket.h"
 
 #include <toml++/toml.hpp>
 #include <nlohmann/json.hpp>
@@ -262,6 +263,15 @@ void Connection::send_join_game() {
     send_packet(brand);
 
     player->teleportToSpawn();
+    PlayerInfoPacket newPlayerPacket(PlayerInfoPacket::ADD_PLAYER, {player}); //govnokod by like
+    for (const auto& p : PlayerList::getInstance().getPlayers()) {
+        p->getConnection()->send_packet(newPlayerPacket);
+    }
+
+    if (!PlayerList::getInstance().getPlayers().empty()) {
+        PlayerInfoPacket allPlayersPacket(PlayerInfoPacket::ADD_PLAYER, PlayerList::getInstance().getPlayers());
+        send_packet(allPlayersPacket);
+    }
 }
 
 void Connection::handle_packet(std::vector<uint8_t>& rawData) {

@@ -16,15 +16,16 @@ void PlayerInfoPacket::write(PacketBuffer& buffer) {
             case ADD_PLAYER: {
                 buffer.writeString(player->getNickname());
 
-                std::string skin = player->getSkin();
+                /*std::string skin = player->getSkin();
                 if (skin.empty()) {
-                    buffer.writeVarInt(0); // 0 properties
+                     // 0 properties
                 } else {
                     buffer.writeVarInt(1); // 1 property
                     buffer.writeString("textures");
                     buffer.writeString(skin);
                     buffer.writeBoolean(false); // isSigned = false
-                }
+                }*/
+                buffer.writeVarInt(0);
 
                 buffer.writeVarInt(1); // gamemode
                 buffer.writeVarInt(1); // ping
