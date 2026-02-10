@@ -28,29 +28,16 @@ void BlockDigRequestPacket::handle(Connection& connection) {
             break;
     }
 
-    if (destroyStage != -2) {
-        BlockDigResponsePacket packet(digger->getId(), this->position, destroyStage);
-
-        // Broadcast the animation to all players except the one digging.
-        for (const auto& player : PlayerList::getInstance().getPlayers()) {
-            if (player->getId() != digger->getId()) {
-                player->getConnection()->send_packet(packet);
-            }
+    BlockDigResponsePacket packet(digger->getId(), this->position, destroyStage);
+    for (const auto& player : PlayerList::getInstance().getPlayers()) {
+        if (player->getId() != digger->getId()) {
+            player->getConnection()->send_packet(packet);
         }
     }
 }
 
 void BlockDigRequestPacket::read(PacketBuffer& buffer) {
     status = buffer.readVarInt();
-    long long packed_pos = buffer.readLong();
-    position.x = (float)(int)(packed_pos >> 38);
-    position.y = (float)(int)(packed_pos & 0xFFF);
-    position.z = (float)(int)((packed_pos >> 12) & 0x3FFFFFF);
-
-    // Convert from 2's complement
-    if (position.x >= 33554432) position.x -= 67108864;
-    if (position.y >= 2048)     position.y -= 4096;
-    if (position.z >= 33554432) position.z -= 67108864;
-
+    position = buffer.readPosition();
     face = buffer.readByte();
 }

@@ -15,7 +15,7 @@ public:
         REMOVE_PLAYER
     };
 
-    PlayerInfoPacket(Action action, const std::vector<std::shared_ptr<Player>>& players);
+    PlayerInfoPacket(Action action, std::vector<std::shared_ptr<Player>> players);
     int getPacketId() const override { return 0x32; }
     void write(PacketBuffer& buffer) override;
 

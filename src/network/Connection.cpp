@@ -117,6 +117,8 @@ void Connection::do_read() {
             } else {
                 // Обработка отключения
                 if (player) PlayerList::getInstance().removePlayer(player->getId());
+
+                LOG_DEBUG("Connection closed: " + ec.message());
             }
         });
 }

@@ -10,31 +10,38 @@ PlayerList& PlayerList::getInstance() {
 void PlayerList::addPlayer(std::shared_ptr<Player> newPlayer) {
     std::lock_guard<std::mutex> lock(playersMutex);
 
-    // 1. Notify the new player about all existing players
-    if (!players.empty()) {
-        PlayerInfoPacket existingPlayersInfo(PlayerInfoPacket::ADD_PLAYER, players);
-        newPlayer->getConnection()->send_packet(existingPlayersInfo);
+    // 1. Notify all *other* players that the new player is joining.
+    PlayerInfoPacket newPlayerPacket(PlayerInfoPacket::ADD_PLAYER, {newPlayer});
+    for (const auto& p : players) {
+        p->getConnection()->send_packet(newPlayerPacket);
     }
 
-    // 2. Notify all existing players about the new player
-    PlayerInfoPacket newPlayerInfo(PlayerInfoPacket::ADD_PLAYER, {newPlayer});
-    for (const auto& existingPlayer : players) {
-        existingPlayer->getConnection()->send_packet(newPlayerInfo);
-    }
-
-    // 3. Add the new player to the list
     players.push_back(newPlayer);
+
+    // 2. Send the complete list of all players (excluding the new one) to the new player.
+    if (!players.empty()) {
+        PlayerInfoPacket allPlayersPacket(PlayerInfoPacket::ADD_PLAYER, players);
+        newPlayer->getConnection()->send_packet(allPlayersPacket);
+    }
 }
 
 void PlayerList::removePlayer(int playerId) {
     std::lock_guard<std::mutex> lock(playersMutex);
-    // TODO: Send PlayerInfo REMOVE_PLAYER packet to all clients
-    players.erase(
-        std::remove_if(players.begin(), players.end(),
-                       [playerId](const std::shared_ptr<Player>& player) {
-                           return player->getId() == playerId;
-                       }),
-        players.end());
+
+    auto playerIt = std::find_if(players.begin(), players.end(),
+                                 [playerId](const std::shared_ptr<Player>& player) {
+                                     return player->getId() == playerId;
+                                 });
+
+    if (playerIt != players.end()) {
+        PlayerInfoPacket removePacket(PlayerInfoPacket::REMOVE_PLAYER, {*playerIt});
+        for (const auto& p : players) {
+            if (p->getId() != playerId) {
+                p->getConnection()->send_packet(removePacket);
+            }
+        }
+        players.erase(playerIt);
+    }
 }
 
 std::shared_ptr<Player> PlayerList::getPlayer(int playerId) {

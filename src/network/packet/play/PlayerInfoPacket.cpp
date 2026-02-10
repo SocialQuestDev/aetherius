@@ -2,41 +2,45 @@
 #include "../../../../include/game/player/Player.h"
 #include "../../../../include/network/PacketBuffer.h"
 
-PlayerInfoPacket::PlayerInfoPacket(Action action, const std::vector<std::shared_ptr<Player>>& players)
-    : action(action), players(players) {}
+PlayerInfoPacket::PlayerInfoPacket(Action action, std::vector<std::shared_ptr<Player>> players)
+    : action(action), players(std::move(players)) {}
 
 void PlayerInfoPacket::write(PacketBuffer& buffer) {
-    buffer.writeVarInt(static_cast<int>(action));
-    buffer.writeVarInt(players.size()); // Number of players in the data array
+    buffer.writeVarInt(action);
+    buffer.writeVarInt(players.size());
 
     for (const auto& player : players) {
         buffer.writeUUID(player->getUuid());
 
         switch (action) {
-            case ADD_PLAYER:
+            case ADD_PLAYER: {
                 buffer.writeString(player->getNickname());
 
-                // Properties (for skin)
-                buffer.writeVarInt(1); // properties length
-                buffer.writeString("textures");
-                buffer.writeString(player->getSkin());
-                buffer.writeBoolean(false); // is signed
+                std::string skin = player->getSkin();
+                if (skin.empty()) {
+                    buffer.writeVarInt(0); // 0 properties
+                } else {
+                    buffer.writeVarInt(1); // 1 property
+                    buffer.writeString("textures");
+                    buffer.writeString(skin);
+                    buffer.writeBoolean(false); // isSigned = false
+                }
 
-                buffer.writeVarInt(1); // gamemode: creative
-                buffer.writeVarInt(100); // ping
-                buffer.writeBoolean(false); // has display name
+                buffer.writeVarInt(1); // gamemode
+                buffer.writeVarInt(1); // ping
+                buffer.writeBoolean(false); // has display name = false
                 break;
-
+            }
             case UPDATE_GAMEMODE:
                 buffer.writeVarInt(1); // gamemode
                 break;
 
             case UPDATE_LATENCY:
-                buffer.writeVarInt(100); // ping
+                buffer.writeVarInt(1); // ping
                 break;
 
             case UPDATE_DISPLAY_NAME:
-                buffer.writeBoolean(false); // has display name
+                buffer.writeBoolean(false); // has display name = false
                 break;
 
             case REMOVE_PLAYER:

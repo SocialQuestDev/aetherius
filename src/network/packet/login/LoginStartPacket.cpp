@@ -11,7 +11,7 @@
 #include <stdexcept>
 
 void LoginStartPacket::handle(Connection& connection) {
-    LOG_INFO("Player logging in: " + nickname);
+    LOG_INFO("New login attempt from " + connection.socket().remote_endpoint().address().to_string() + " with nickname: " + nickname);
     connection.set_nickname(nickname);
 
     Server& server = Server::get_instance();
