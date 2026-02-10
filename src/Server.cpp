@@ -129,6 +129,7 @@ void Server::register_packets() {
 }
 
 void Server::start_accept() {
+    // Создаем "пустое" соединение, которое будет ждать клиента
     std::shared_ptr<Connection> new_connection = Connection::create(io_context_);
 
     acceptor_.async_accept(new_connection->socket(),
@@ -139,9 +140,24 @@ void Server::start_accept() {
 
 void Server::handle_accept(const std::shared_ptr<Connection> &new_connection, const boost::system::error_code& error) {
     if (!error) {
-        // ФИКС: Мгновенная отправка пакетов
-        new_connection->socket().set_option(boost::asio::ip::tcp::no_delay(true));
+        std::string client_ip = "unknown";
+        try {
+            client_ip = new_connection->socket().remote_endpoint().address().to_string();
+        } catch(...) {}
+
+        LOG_INFO("New connection from: " + client_ip);
+
+        // === ГЛАВНЫЙ ФИКС ЛАГОВ ===
+        // Отключаем алгоритм Нагла. Без этого MOTD тормозит.
+        boost::system::error_code ec;
+        new_connection->socket().set_option(boost::asio::ip::tcp::no_delay(true), ec);
+        
+        // Запускаем чтение в Connection
         new_connection->start();
-    } 
+    } else {
+        LOG_ERROR("Accept error: " + error.message());
+    }
+
+    // Сразу готовимся принимать следующего, не дожидаясь обработки текущего
     start_accept();
 }
