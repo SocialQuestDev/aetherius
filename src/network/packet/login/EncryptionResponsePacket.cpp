@@ -8,6 +8,7 @@
 #include "../../../../include/Logger.h"
 #include "../../../../include/utility/VectorUtilities.h"
 #include "../../../../include/network/packet/play/ChatMessagePacket.h"
+#include "../../../../include/network/packet/login/SetCompressionPacket.h"
 
 void EncryptionResponsePacket::read(PacketBuffer& buffer) {
     encryptedSharedSecret = buffer.readByteArray();
@@ -49,7 +50,7 @@ void EncryptionResponsePacket::handle(Connection& connection) {
         compPacket.writeVarInt(0x03); // Set Compression
         compPacket.writeVarInt(threshold);
 
-        connection.send_packet_raw(compPacket.finalize(false, -1, nullptr));
+        connection.send_packet_raw(connection.finalize_packet(compPacket));
         connection.set_compression(true);
     }
 

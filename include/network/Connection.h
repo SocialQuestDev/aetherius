@@ -31,6 +31,7 @@ public:
     void send_packet(PacketBuffer& packet);
     void send_packet(OutboundPacket& packet);
     void send_packet_raw(std::vector<uint8_t> packetData);
+    std::vector<uint8_t> finalize_packet(PacketBuffer& packet);
 
     void set_verify_token(const std::vector<uint8_t>& token);
     std::vector<uint8_t> get_verify_token() const;

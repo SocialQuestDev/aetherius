@@ -180,6 +180,11 @@ void Connection::handle_packet(std::vector<uint8_t>& rawData) {
     }
 }
 
+std::vector<uint8_t> Connection::finalize_packet(PacketBuffer& packet){
+    int th = Server::get_instance().get_config()["server"]["compression_threshold"].value_or(256);
+    return packet.finalize(compression_enabled, th, crypto_state.get());
+}
+
 void Connection::send_packet(OutboundPacket& packet) {
     PacketBuffer buffer;
     buffer.writeVarInt(packet.getPacketId());
