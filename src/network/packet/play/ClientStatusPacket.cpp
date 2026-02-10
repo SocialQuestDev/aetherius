@@ -1,7 +1,7 @@
 #include "../../../../include/network/packet/play/ClientStatusPacket.h"
 #include "../../../../include/network/Connection.h"
 #include "../../../../include/Server.h"
-#include "../../../../include/Logger.h"
+#include "../../../../include/console/Logger.h"
 #include "../../../../include/game/world/World.h"
 #include "../../../../include/game/player/Player.h"
 

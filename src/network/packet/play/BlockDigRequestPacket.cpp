@@ -13,20 +13,16 @@ void BlockDigRequestPacket::handle(Connection& connection) {
         return;
     }
 
-    // Determine the destroy stage based on the dig status.
-    // For a full implementation, the server should track breaking progress over time.
-    char destroyStage = -2; // Default to no action
+    char destroyStage = -2;
 
     switch (status) {
-        case 0: // Started digging
-            destroyStage = 0; // Show first stage of breaking
+        case 0:
+            destroyStage = 0;
             break;
-        case 1: // Cancelled digging
-            destroyStage = -1; // Remove breaking animation
+        case 1:
+            destroyStage = -1;
             break;
-        case 2: // Finished digging
-            // For now, just clear the animation.
-            // The actual block destruction logic was causing issues and has been removed.
+        case 2:
             destroyStage = 1;
             break;
     }

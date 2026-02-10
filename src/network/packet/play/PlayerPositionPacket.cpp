@@ -3,16 +3,20 @@
 #include "../../../../include/game/player/Player.h"
 #include "../../../../include/game/player/PlayerList.h"
 #include "../../../../include/network/packet/play/EntityTeleportPacket.h"
+#include "../../../../include/network/packet/play/EntityPositionPacket.h"
+#include "../../../../include/network/packet/play/EntityPositionAndRotationPacket.h"
+#include "../../../../include/network/packet/play/EntityRotationPacket.h"
+#include "../../../../include/network/packet/play/EntityHeadLookPacket.h"
 
-// PlayerPositionPacketFull
-void PlayerPositionPacketFull::read(PacketBuffer& buffer) {
+// PlayerPositionPacket
+void PlayerPositionPacket::read(PacketBuffer& buffer) {
     x = buffer.readDouble();
     y = buffer.readDouble();
     z = buffer.readDouble();
     onGround = buffer.readBoolean();
 }
 
-void PlayerPositionPacketFull::handle(Connection& connection) {
+void PlayerPositionPacket::handle(Connection& connection) {
     auto player = connection.getPlayer();
     if (player) {
         player->setPosition(Vector3(x, y, z));
@@ -21,11 +25,12 @@ void PlayerPositionPacketFull::handle(Connection& connection) {
             player->kill();
         }
 
-        // Broadcast the position update to other players
         EntityTeleportPacket packet(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
-        for (const auto& otherPlayer : PlayerList::getInstance().getPlayers()) {
-            if (otherPlayer->getId() != player->getId()) {
-                otherPlayer->getConnection()->send_packet(packet);
+        EntityHeadLookPacket headLook(player->getId(), player->getRotation().x);
+        for (const auto& other : PlayerList::getInstance().getPlayers()) {
+            if (other->getId() != player->getId()) {
+                other->getConnection()->send_packet(packet);
+                other->getConnection()->send_packet(headLook);
             }
         }
     }
@@ -51,11 +56,13 @@ void PlayerPositionAndRotationPacket::handle(Connection& connection) {
             player->kill();
         }
 
-        // Broadcast the position and rotation update to other players
-        EntityTeleportPacket packet(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
-        for (const auto& otherPlayer : PlayerList::getInstance().getPlayers()) {
-            if (otherPlayer->getId() != player->getId()) {
-                otherPlayer->getConnection()->send_packet(packet);
+        EntityTeleportPacket teleport(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
+        EntityHeadLookPacket headLook(player->getId(), player->getRotation().x);
+
+        for (const auto& other : PlayerList::getInstance().getPlayers()) {
+            if (other->getId() != player->getId()) {
+                other->getConnection()->send_packet(teleport);
+                other->getConnection()->send_packet(headLook);
             }
         }
     }
@@ -74,13 +81,13 @@ void PlayerRotationPacket::handle(Connection& connection) {
         player->setRotation(Vector2(yaw, pitch));
         player->setOnGround(onGround);
 
-        // Broadcast the rotation update to other players
-        // For rotation-only updates, we can use a different packet in the future,
-        // but for now, EntityTeleportPacket will work.
-        EntityTeleportPacket packet(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
-        for (const auto& otherPlayer : PlayerList::getInstance().getPlayers()) {
-            if (otherPlayer->getId() != player->getId()) {
-                otherPlayer->getConnection()->send_packet(packet);
+        EntityTeleportPacket teleport(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
+        EntityHeadLookPacket headLook(player->getId(), player->getRotation().x);
+
+        for (const auto& other : PlayerList::getInstance().getPlayers()) {
+            if (other->getId() != player->getId()) {
+                other->getConnection()->send_packet(teleport);
+                other->getConnection()->send_packet(headLook);
             }
         }
     }

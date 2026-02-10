@@ -9,6 +9,7 @@
 #include "../../other/Vector2.h"
 
 class Connection; // Forward declaration
+class Packet;     // Forward declaration
 
 // Placeholder for an item stack
 struct Slot {
@@ -57,6 +58,7 @@ public:
     // Actions
     void kill();
     void teleportToSpawn();
+    void disconnect();
 private:
     int id;
     UUID uuid;

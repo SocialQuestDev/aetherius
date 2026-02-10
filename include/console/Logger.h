@@ -31,7 +31,7 @@ enum class LogLevel {
     DEBUG,
     WARNING,
     ERROR,
-    CRITICAL
+    FATAL
 };
 
 struct LogEntry {
@@ -69,4 +69,4 @@ private:
 #define LOG_DEBUG(msg)    Logger::Log(LogLevel::DEBUG, msg, __FUNCTION__, __FILE__, __LINE__)
 #define LOG_WARN(msg)     Logger::Log(LogLevel::WARNING, msg, __FUNCTION__, __FILE__, __LINE__)
 #define LOG_ERROR(msg)    Logger::Log(LogLevel::ERROR, msg, __FUNCTION__, __FILE__, __LINE__)
-#define LOG_CRITICAL(msg) Logger::Log(LogLevel::CRITICAL, msg, __FUNCTION__, __FILE__, __LINE__)
+#define LOG_FATAL(msg)    Logger::Log(LogLevel::FATAL, msg, __FUNCTION__, __FILE__, __LINE__)

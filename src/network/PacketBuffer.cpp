@@ -1,6 +1,6 @@
 #include "../../include/network/PacketBuffer.h"
 #include "../../include/crypto/AES.h"
-#include "../../include/Logger.h"
+#include "../../include/console/Logger.h"
 #include "../../include/other/deflate.h"
 #include <cstdint>
 #include <cstring>

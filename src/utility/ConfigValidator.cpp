@@ -40,6 +40,18 @@ toml::table ConfigValidator::load_and_validate(const std::string& path) {
     validate_entry(config, "server", "compression_enabled", toml::value(true));
     validate_entry(config, "server", "compression_threshold", toml::value(256));
 
+    validate_entry(config, "world", "is_hardcore", toml::value(false));
+    validate_entry(config, "world", "gamemode", toml::value(0));
+    validate_entry(config, "world", "previous_gamemode", toml::value(255));
+    validate_entry(config, "world", "world_count", toml::value(1));
+    validate_entry(config, "world", "world_name", toml::value("minecraft:overworld"));
+    validate_entry(config, "world", "hashed_seed", toml::value(0LL));
+    validate_entry(config, "world", "view_distance", toml::value(10));
+    validate_entry(config, "world", "reduced_debug_info", toml::value(false));
+    validate_entry(config, "world", "enable_respawn_screen", toml::value(true));
+    validate_entry(config, "world", "is_debug", toml::value(false));
+    validate_entry(config, "world", "is_flat", toml::value(true));
+
     if (before != table_to_string(config)) {
         std::ofstream file(path);
         file << config;
@@ -60,6 +72,19 @@ void ConfigValidator::create_default(const std::string& path) {
             { "icon_path", "server-icon.png" },
             { "compression_enabled", true },
             { "compression_threshold", 256 }
+        }},
+        { "world", toml::table{
+            { "is_hardcore", false },
+            { "gamemode", 0 },
+            { "previous_gamemode", 255 },
+            { "world_count", 1 },
+            { "world_name", "minecraft:overworld" },
+            { "hashed_seed", 0LL },
+            { "view_distance", 10 },
+            { "reduced_debug_info", false },
+            { "enable_respawn_screen", true },
+            { "is_debug", false },
+            { "is_flat", true }
         }}
     };
 

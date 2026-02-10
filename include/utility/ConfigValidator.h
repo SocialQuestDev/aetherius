@@ -9,7 +9,7 @@
 
 #include <toml++/toml.hpp>
 
-#include "../Logger.h"
+#include "../console/Logger.h"
 
 class ConfigValidator {
 public:

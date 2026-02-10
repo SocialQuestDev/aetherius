@@ -7,7 +7,7 @@
 #include <windows.h>
 #endif
 
-#include "../include/Logger.h"
+#include "../../include/console/Logger.h"
 
 std::vector<LogEntry> Logger::s_History;
 std::mutex Logger::s_Mutex;
@@ -54,16 +54,16 @@ void Logger::Log(const LogLevel level, const std::string& message,const char* fu
     std::string msgColor = ANSI_RESET;
     std::string labelColor;
 
-    std::ostream& outStream = (level == LogLevel::ERROR || level == LogLevel::CRITICAL)
+    std::ostream& outStream = (level == LogLevel::ERROR || level == LogLevel::FATAL)
                               ? std::cerr
                               : std::cout;
 
     switch (level) {
-        case LogLevel::INFO:     levelStr = " INFO   "; labelColor = ANSI_INVERSE ANSI_COLOR_WHITE; msgColor = ANSI_COLOR_WHITE; break;
-        case LogLevel::DEBUG:    levelStr = " DEBUG  "; labelColor = ANSI_INVERSE ANSI_COLOR_GREEN; msgColor = ANSI_COLOR_GREEN; break;
-        case LogLevel::WARNING:  levelStr = "WARNING "; labelColor = ANSI_INVERSE ANSI_COLOR_YELLOW; msgColor = ANSI_COLOR_YELLOW; break;
-        case LogLevel::ERROR:    levelStr = " ERROR  "; labelColor = ANSI_INVERSE ANSI_COLOR_RED; msgColor = ANSI_COLOR_RED; break;
-        case LogLevel::CRITICAL: levelStr = "CRITICAL"; labelColor = ANSI_INVERSE ANSI_COLOR_256_DARK_RED; msgColor = ANSI_COLOR_256_DARK_RED; break;
+        case LogLevel::INFO:     levelStr = " INFO  "; labelColor = ANSI_INVERSE ANSI_COLOR_WHITE; msgColor = ANSI_COLOR_WHITE; break;
+        case LogLevel::DEBUG:    levelStr = " DEBUG "; labelColor = ANSI_INVERSE ANSI_COLOR_GREEN; msgColor = ANSI_COLOR_GREEN; break;
+        case LogLevel::WARNING:  levelStr = " WARN  "; labelColor = ANSI_INVERSE ANSI_COLOR_YELLOW; msgColor = ANSI_COLOR_YELLOW; break;
+        case LogLevel::ERROR:    levelStr = " ERROR "; labelColor = ANSI_INVERSE ANSI_COLOR_RED; msgColor = ANSI_COLOR_RED; break;
+        case LogLevel::FATAL:    levelStr = " FATAL "; labelColor = ANSI_INVERSE ANSI_COLOR_256_DARK_RED; msgColor = ANSI_COLOR_256_DARK_RED; break;
     }
 
     const std::string filePath(file);

@@ -5,7 +5,7 @@
 #include "../../../../include/game/world/World.h"
 #include "../../../../include/Server.h"
 #include "../../../../include/network/packet/play/BlockChangePacket.h"
-#include "../../../../include/Logger.h"
+#include "../../../../include/console/Logger.h"
 #include "../../../../include/utility/MinecraftRegistry.hpp"
 void BlockPlacePacket::handle(Connection& connection) {
     auto player = connection.getPlayer();

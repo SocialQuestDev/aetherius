@@ -1,6 +1,6 @@
 #include "../../../../include/network/packet/play/KeepAlivePacketPlay.h"
 #include "../../../../include/network/Connection.h"
-#include "../../../../include/Logger.h"
+#include "../../../../include/console/Logger.h"
 
 void KeepAlivePacketPlay::handle(Connection& connection) {
     // The server should check if the keepAliveId is correct.

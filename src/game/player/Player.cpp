@@ -6,8 +6,9 @@
 #include "../../../include/network/packet/play/EntityStatusPacket.h"
 #include "../../../include/network/packet/play/ChatMessagePacket.h"
 #include "../../../include/network/packet/play/PlayerInfoPacket.h"
+#include "../../../include/network/packet/play/DestroyEntitiesPacket.h"
 #include "../../../include/auth/MojangAuthHelper.h"
-#include "../../../include/Logger.h"
+#include "../../../include/console/Logger.h"
 #include <memory>
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
@@ -137,16 +138,26 @@ void Player::kill() {
     if (dead) return;
     dead = true;
 
-    LOG_DEBUG("Player " + nickname + " fell into the void. Sending death status and zero health.");
+    LOG_DEBUG("Player " + nickname + " died. Broadcasting death animation.");
 
     UpdateHealthPacket healthPacket(0.0f, 0, 0.0f);
     connection->send_packet(healthPacket);
 
-    EntityStatusPacket deathPacket(id, 3);
-    connection->send_packet(deathPacket);
+    EntityStatusPacket damagePacket(id, static_cast<std::byte>(2));
+    EntityStatusPacket deathPacket(id, static_cast<std::byte>(3));
+    EntityStatusPacket deathAnimPacket(id, static_cast<std::byte>(60));
+    for (const auto& other : PlayerList::getInstance().getPlayers()) {
+        other->getConnection()->send_packet(damagePacket);
+        other->getConnection()->send_packet(deathPacket);
+        other->getConnection()->send_packet(deathAnimPacket);
+    }
 
-    ChatMessagePacket chatPacket("{\"text\":\"Вы упали в бездну!\", \"color\":\"red\"}", 1, get_offline_UUID_128(nickname));
-    connection->send_packet(chatPacket);
+    std::string deathMsg = "{\"text\":\"" + nickname + " умер!\"}";
+    ChatMessagePacket chatPacket(deathMsg, 1, uuid);
+
+    for (const auto& other : PlayerList::getInstance().getPlayers()) {
+        other->getConnection()->send_packet(chatPacket);
+    }
 }
 
 void Player::teleportToSpawn() {
@@ -167,4 +178,23 @@ void Player::teleportToSpawn() {
     connection->send_packet(posLookPacket);
 
     LOG_DEBUG("Player " + nickname + " teleported to spawn and healed");
+}
+
+void Player::disconnect() {
+    for (const auto& client: PlayerList::getInstance().getPlayers()) {
+        ChatMessagePacket packet(R"({"text":")" + nickname + R"( left the game", "color":"yellow"})", 1, uuid);
+        client.get()->getConnection()->send_packet(packet);
+    }
+
+    DestroyEntitiesPacket destroyPacket({getId()});
+    for (const auto& p : PlayerList::getInstance().getPlayers()) {
+        if (p->getId() != getId()) {
+            p->getConnection()->send_packet(destroyPacket);
+        }
+    }
+
+    PlayerList::getInstance().removePlayer(getId());
+    connection->socket().close();
+
+    LOG_DEBUG("Player " + nickname + " disconnected");
 }

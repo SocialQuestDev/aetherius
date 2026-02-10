@@ -5,7 +5,7 @@
 #include "../../../../include/game/player/PlayerList.h"
 #include "../../../../include/game/player/Player.h"
 #include "../../../../include/auth/MojangAuthHelper.h"
-#include "../../../../include/Logger.h"
+#include "../../../../include/console/Logger.h"
 #include "../../../../include/network/packet/play/ChatMessagePacket.h"
 #include <cstddef>
 #include <stdexcept>

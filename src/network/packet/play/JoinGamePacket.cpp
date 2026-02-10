@@ -5,22 +5,24 @@
 JoinGamePacket::JoinGamePacket(int entityId, World& world) : entityId(entityId), world(world) {}
 
 void JoinGamePacket::write(PacketBuffer& buffer) {
+    auto& worldConfig = Server::get_instance().get_world_config();
+
     buffer.writeInt(entityId);
-    buffer.writeBoolean(false); // Is hardcore
-    buffer.writeByte(1); // Gamemode: Creative
-    buffer.writeByte(255); // Previous Gamemode
-    buffer.writeVarInt(1); // World Count
-    buffer.writeString("minecraft:overworld"); // World Name
+    buffer.writeBoolean(worldConfig["is_hardcore"].value_or(false));
+    buffer.writeByte(worldConfig["gamemode"].value_or(0));
+    buffer.writeByte(worldConfig["previous_gamemode"].value_or(255));
+    buffer.writeVarInt(worldConfig["world_count"].value_or(1));
+    buffer.writeString(worldConfig["world_name"].value_or("minecraft:overworld"));
 
     buffer.writeNbt(world.getDimensionCodec());
     buffer.writeNbt(world.getDimension());
 
-    buffer.writeString("minecraft:overworld"); // World Name
-    buffer.writeLong(0); // Hashed seed
-    buffer.writeVarInt(20); // Max Players
-    buffer.writeVarInt(10); // View Distance
-    buffer.writeBoolean(false); // Reduced Debug Info
-    buffer.writeBoolean(true); // Enable respawn screen
-    buffer.writeBoolean(false); // Is Debug
-    buffer.writeBoolean(false); // Is Flat
+    buffer.writeString(worldConfig["world_name"].value_or("minecraft:overworld"));
+    buffer.writeLong(worldConfig["hashed_seed"].value_or(0LL));
+    buffer.writeVarInt(Server::get_instance().get_config()["server"]["max_players"].value_or(20));
+    buffer.writeVarInt(worldConfig["view_distance"].value_or(10));
+    buffer.writeBoolean(worldConfig["reduced_debug_info"].value_or(false));
+    buffer.writeBoolean(worldConfig["enable_respawn_screen"].value_or(true));
+    buffer.writeBoolean(worldConfig["is_debug"].value_or(false));
+    buffer.writeBoolean(worldConfig["is_flat"].value_or(true));
 }

@@ -1,6 +1,7 @@
 #include <memory>
 #include "../include/Server.h"
-#include "../include/Logger.h"
+#include "../include/commands/CommandRegistry.h"
+#include "../include/console/Logger.h"
 #include "../include/game/player/PlayerList.h"
 #include "../include/crypto/RSA.h"
 #include "../include/utility/ConfigValidator.h"
@@ -23,6 +24,9 @@
 #include "../include/network/packet/play/ClientAbilitiesPacket.h"
 #include "../include/network/packet/play/EntityActionPacket.h"
 #include "../include/network/packet/play/ClientSettingsPacket.h"
+#include "../include/commands/gameCommands/PingCommand.h"
+#include "../include/commands/gameCommands/KillCommand.h"
+
 
 Server* Server::instance;
 
@@ -69,17 +73,32 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
     }
 
     register_packets();
+    register_commands();
+
+    console_manager_ = std::make_unique<ConsoleManager>(io_context_);
 
     LOG_INFO("Server started on " + ip + ":" + std::to_string(port));
     start_accept();
+}
+
+void Server::start_console() {
+    console_manager_->start();
 }
 
 Server& Server::get_instance() {
     return *instance;
 }
 
+CommandRegistry& Server::get_command_registry() {
+    return command_registry_;
+}
+
 toml::table& Server::get_config() {
     return config;
+}
+
+toml::table& Server::get_world_config() {
+    return *config["world"].as_table();
 }
 
 World& Server::get_world() {
@@ -115,7 +134,7 @@ void Server::register_packets() {
     packet_registry_.registerPacket(State::PLAY, 0x04, []{ return std::make_unique<ClientStatusPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x05, []{ return std::make_unique<ClientSettingsPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x10, []{ return std::make_unique<KeepAlivePacketPlay>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x12, []{ return std::make_unique<PlayerPositionPacketFull>(); });
+    packet_registry_.registerPacket(State::PLAY, 0x12, []{ return std::make_unique<PlayerPositionPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x13, []{ return std::make_unique<PlayerPositionAndRotationPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x14, []{ return std::make_unique<PlayerRotationPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x15, []{ return std::make_unique<PlayerOnGroundPacket>(); });
@@ -126,6 +145,11 @@ void Server::register_packets() {
     packet_registry_.registerPacket(State::PLAY, 0x28, []{ return std::make_unique<SetCreativeSlotPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x2C, []{ return std::make_unique<ArmAnimationPacket>(); });
     packet_registry_.registerPacket(State::PLAY, 0x2E, []{ return std::make_unique<BlockPlacePacket>(); });
+}
+
+void Server::register_commands() {
+    command_registry_.registerGameCommand(std::make_unique<PingCommand>());
+    command_registry_.registerGameCommand(std::make_unique<KillCommand>());
 }
 
 void Server::start_accept() {

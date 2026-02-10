@@ -5,10 +5,9 @@
 #include "../../../../include/auth/MojangAuthHelper.h"
 #include "../../../../include/game/player/PlayerList.h"
 #include "../../../../include/game/player/Player.h"
-#include "../../../../include/Logger.h"
+#include "../../../../include/console/Logger.h"
 #include "../../../../include/utility/VectorUtilities.h"
 #include "../../../../include/network/packet/play/ChatMessagePacket.h"
-#include "../../../../include/network/packet/login/SetCompressionPacket.h"
 
 void EncryptionResponsePacket::read(PacketBuffer& buffer) {
     encryptedSharedSecret = buffer.readByteArray();

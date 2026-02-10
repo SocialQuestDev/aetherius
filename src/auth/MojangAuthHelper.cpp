@@ -7,7 +7,7 @@
 #include <openssl/sha.h>
 #include <random>
 
-#include "../../include/Logger.h"
+#include "../../include/console/Logger.h"
 
 using json = nlohmann::json;
 

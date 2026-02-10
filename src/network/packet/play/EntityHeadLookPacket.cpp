@@ -1,8 +1,8 @@
 #include "../../../../include/network/packet/play/EntityHeadLookPacket.h"
 #include "../../../../include/network/PacketBuffer.h"
 
-EntityHeadLookPacket::EntityHeadLookPacket(int entityId, float headYaw, float headPitch)
-    : entityId(entityId), headYaw(headYaw), headPitch(headPitch) {}
+EntityHeadLookPacket::EntityHeadLookPacket(int entityId, float headYaw)
+    : entityId(entityId), headYaw(headYaw) {}
 
 void EntityHeadLookPacket::write(PacketBuffer& buffer) {
     buffer.writeVarInt(entityId);

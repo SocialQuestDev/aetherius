@@ -1,15 +1,24 @@
 #include "../../../../include/network/packet/play/GetChatMessagePacket.h"
 #include "../../../../include/game/player/PlayerList.h"
-#include "../../../../include/Logger.h"
+#include "../../../../include/console/Logger.h"
 #include "../../../../include/network/Connection.h"
 #include "../../../../include/network/packet/play/ChatMessagePacket.h"
+#include "../../../../include/Server.h"
 
 void GetChatMessagePacket::handle(Connection &connection) {
     LOG_DEBUG("Received chat message: " + message);
 
-    for (const auto& player: PlayerList::getInstance().getPlayers()) {
-        ChatMessagePacket chatPacket(R"({"text":")" + connection.getPlayer()->getNickname() + ": " + message + R"(", "color":"white"})", 1, connection.getPlayer()->getUuid());
-        player.get()->getConnection()->send_packet(chatPacket);
+    if (message[0] == '/') {
+        Server::get_instance().get_command_registry().executeCommand(&connection, message);
+    }
+    else {
+        auto player = connection.getPlayer();
+        if (!player) return;
+
+        ChatMessagePacket chatPacket("{\"text\":\"" + player->getNickname() + ": " + message + "\"}", 0, player->getUuid());
+        for (const auto& p : PlayerList::getInstance().getPlayers()) {
+            p->getConnection()->send_packet(chatPacket);
+        }
     }
 }
 

@@ -1,13 +1,9 @@
 #include "../../include/network/Connection.h"
-#include "../../include/Logger.h"
+#include "../../include/console/Logger.h"
 #include "../../include/game/world/Chunk.h"
 #include "../../include/Server.h"
-#include "../../include/crypto/RSA.h"
-#include "../../include/auth/MojangAuthHelper.h"
-#include "../../include/utility/VectorUtilities.h"
 #include "../../include/game/player/PlayerList.h"
 #include "../../include/game/player/Player.h"
-#include "../../include/game/world/World.h"
 #include "../../include/network/PacketRegistry.h"
 #include "../../include/network/packet/InboundPacket.h"
 #include "../../include/network/packet/OutboundPacket.h"
@@ -16,8 +12,7 @@
 #include "../../include/network/packet/play/BrandPacket.h"
 #include "../../include/network/packet/play/PlayerInfoPacket.h"
 #include "../../include/network/packet/play/SpawnNamedEntityPacket.h"
-#include "../../include/network/packet/play/EntityMetadataPacket.h"
-#include "../../include/network/packet/play/PlayerPositionAndLookPacket.h" // Для телепорта
+#include "../../include/network/packet/play/DeclareCommandsPacket.h"
 
 #include <toml++/toml.hpp>
 #include <nlohmann/json.hpp>
@@ -110,7 +105,7 @@ void Connection::do_read() {
                 process_incoming_buffer();
                 do_read();
             } else {
-                if (player) PlayerList::getInstance().removePlayer(player->getId());
+                if (player) player->disconnect();
                 LOG_DEBUG("Connection closed: " + ec.message());
             }
         });
@@ -187,8 +182,7 @@ void Connection::process_incoming_buffer() {
 
     } catch (const std::exception& e) {
         LOG_ERROR("Buffer processing error: " + std::string(e.what()));
-        socket_.close();
-        if (player) PlayerList::getInstance().removePlayer(player->getId());
+        if (player) player->disconnect();
     }
 }
 
@@ -210,37 +204,41 @@ void Connection::send_keep_alive() {
 }
 
 void Connection::send_join_game() {
-    // 1. Отправляем JoinGame и Brand самому игроку
     JoinGamePacket joinGamePacket(player->getId(), Server::get_instance().get_world());
     send_packet(joinGamePacket);
 
     BrandPacket brand("Aetherius");
     send_packet(brand);
 
+    DeclareCommandsPacket commandsPacket(Server::get_instance().get_command_registry());
+    send_packet(commandsPacket);
+
     player->teleportToSpawn();
 
     if (!PlayerList::getInstance().getPlayers().empty()) {
-        PlayerInfoPacket newPlayerPacket(PlayerInfoPacket::ADD_PLAYER, {player}); //govnokod by like
-        for (const auto& p : PlayerList::getInstance().getPlayers()) {
-            p->getConnection()->send_packet(newPlayerPacket);
-        }
+        if (!PlayerList::getInstance().getPlayers().empty()) {
+            PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
+            for (const auto& p : PlayerList::getInstance().getPlayers()) {
+                p->getConnection()->send_packet(addCurrentToAll);
+            }
 
-        SpawnNamedEntityPacket spawnPlayerPacket(player); //govnokod by like
-        for (const auto& p : PlayerList::getInstance().getPlayers()) {
-            if (p->getId() != player->getId()) {
-                p->getConnection()->send_packet(spawnPlayerPacket);
+            PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, PlayerList::getInstance().getPlayers());
+            send_packet(addExistingToCurrent);
+
+            SpawnNamedEntityPacket spawnCurrent(player);
+            for (const auto& p : PlayerList::getInstance().getPlayers()) {
+                if (p->getId() != player->getId()) {
+                    p->getConnection()->send_packet(spawnCurrent);
+                }
+            }
+
+            for (const auto& p : PlayerList::getInstance().getPlayers()) {
+                if (p->getId() != player->getId()) {
+                    SpawnNamedEntityPacket spawnExisting(p);
+                    send_packet(spawnExisting);
+                }
             }
         }
-
-        //for (const auto& p : PlayerList::getInstance().getPlayers()) {
-        //    if (p->getId() != player->getId()) {
-        //        SpawnNamedEntityPacket spawnAllPlayersPacket(player);
-        //        p->getConnection()->send_packet(spawnAllPlayersPacket);
-        //    }
-        //}
-
-        PlayerInfoPacket allPlayersPacket(PlayerInfoPacket::ADD_PLAYER, PlayerList::getInstance().getPlayers());
-        send_packet(allPlayersPacket);
     }
 
     LOG_INFO(nickname + " (" + std::to_string(player->getId()) + ") joined the game");

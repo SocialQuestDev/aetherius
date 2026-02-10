@@ -1,44 +1,45 @@
 #include "../../../../include/network/packet/play/EntityActionPacket.h"
 #include "../../../../include/network/Connection.h"
 #include "../../../../include/game/player/Player.h"
-#include "../../../../include/game/player/PlayerList.h"
 #include "../../../../include/network/packet/play/EntityMetadataPacket.h"
-#include "../../../../include/Logger.h"
+#include "../../../../include/game/player/PlayerList.h"
+#include "../../../../include/console/Logger.h"
 
 void EntityActionPacket::handle(Connection& connection) {
     auto player = connection.getPlayer();
     if (!player) return;
 
-    bool stateChanged = false;
+    bool metadataChanged = false;
     switch (actionId) {
         case 0: // Start sneaking
             player->setSneaking(true);
-            stateChanged = true;
+            metadataChanged = true;
             break;
         case 1: // Stop sneaking
             player->setSneaking(false);
-            stateChanged = true;
+            metadataChanged = true;
             break;
         case 3: // Start sprinting
             player->setSprinting(true);
-            stateChanged = true;
+            metadataChanged = true;
             break;
         case 4: // Stop sprinting
             player->setSprinting(false);
-            stateChanged = true;
+            metadataChanged = true;
             break;
         // Other actions (leaving bed, etc.) can be handled here.
     }
 
-    if (stateChanged) {
-        // Broadcast the metadata update to other players
-        EntityMetadataPacket packet(*player);
-        for (const auto& otherPlayer : PlayerList::getInstance().getPlayers()) {
-            if (otherPlayer->getId() != player->getId()) {
-                otherPlayer->getConnection()->send_packet(packet);
+    if (metadataChanged) {
+        EntityMetadataPacket metadataPacket(*player);
+        for (const auto& other : PlayerList::getInstance().getPlayers()) {
+            if (other->getId() != player->getId()) {
+                other->getConnection()->send_packet(metadataPacket);
             }
         }
     }
+
+    LOG_DEBUG("Action received: " + std::to_string(actionId));
 }
 
 void EntityActionPacket::read(PacketBuffer& buffer) {
