@@ -7,6 +7,7 @@
 #include "../../../../include/auth/MojangAuthHelper.h"
 #include "../../../../include/Logger.h"
 #include "../../../../include/network/packet/play/ChatMessagePacket.h"
+#include <cstddef>
 
 void LoginStartPacket::handle(Connection& connection) {
     LOG_INFO("Player logging in: " + nickname);
@@ -15,7 +16,7 @@ void LoginStartPacket::handle(Connection& connection) {
     Server& server = Server::get_instance();
     auto serverCfg = server.get_config();
 
-    if (connection.is_connected()) {
+    if (PlayerList::getInstance().getPlayer(nickname) != nullptr) {
         PacketBuffer alreadyJoinedDisconnect;
         alreadyJoinedDisconnect.writeVarInt(0x19);
         alreadyJoinedDisconnect.writeString("{\"text\":\"You are already connected to a server.\", \"color\":\"red\"}");
