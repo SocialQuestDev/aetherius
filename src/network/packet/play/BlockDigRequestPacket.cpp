@@ -4,6 +4,7 @@
 #include "../../../../include/game/player/Player.h"
 #include "../../../../include/network/packet/play/BlockDigResponsePacket.h"
 #include "../../../../include/network/packet/play/BlockChangePacket.h"
+#include "../../../../include/Server.h"
 #include "../../../../include/utility/MinecraftRegistry.hpp"
 
 void BlockDigRequestPacket::handle(Connection& connection) {
@@ -38,6 +39,7 @@ void BlockDigRequestPacket::handle(Connection& connection) {
             player->getConnection()->send_packet(blockChangePacket);
         }
     }
+    Server::get_instance().get_world().setBlock(this->position, 0);
 }
 
 void BlockDigRequestPacket::read(PacketBuffer& buffer) {
