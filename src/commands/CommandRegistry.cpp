@@ -13,29 +13,27 @@ void CommandRegistry::registerConsoleCommand(std::unique_ptr<ConsoleCommand> com
 }
 
 void CommandRegistry::executeCommand(std::shared_ptr<Player> player, const std::string& message) {
-    bool isGameCommand = player || (!message.empty() && message[0] == '/');
     std::string command_text = message;
-    if (isGameCommand && !message.empty() && message[0] == '/') {
+    if (player && !message.empty() && message[0] == '/') {
         command_text = message.substr(1);
     }
 
     std::vector<std::string> parts = String::split(command_text, ' ');
     if (parts.empty()) return;
 
-    std::unordered_map<std::string, std::unique_ptr<Command>>* commands;
-    if (isGameCommand) {
-        commands = &gameCommands;
-    } else {
-        commands = &consoleCommands;
-    }
-
-    auto it = commands->find(parts[0]);
-    if (it != commands->end()) {
-        std::vector<std::string> args(parts.begin() + 1, parts.end());
-        it->second->execute(player, args);
-    } else {
-        if (player && player->getConnection()) {
+    if (player) {
+        auto it = gameCommands.find(parts[0]);
+        if (it != gameCommands.end()) {
+            std::vector<std::string> args(parts.begin() + 1, parts.end());
+            it->second->execute(player, args);
+        } else {
             player->sendChatMessage("Unknown command: " + message);
+        }
+    } else {
+        auto it = consoleCommands.find(parts[0]);
+        if (it != consoleCommands.end()) {
+            std::vector<std::string> args(parts.begin() + 1, parts.end());
+            it->second->execute(nullptr, args);
         } else {
             LOG_INFO("Unknown command: " + message);
         }

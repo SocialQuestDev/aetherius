@@ -42,6 +42,7 @@ bool Player::isOnGround() const { return onGround; }
 short Player::getHeldItemSlot() const { return heldItemSlot; }
 Gamemode Player::getGamemode() const {return gamemode; }
 const std::vector<Slot>& Player::getInventory() const { return inventory; }
+std::vector<Slot>& Player::getInventory() { return inventory; } // Non-const overload
 bool Player::isFlying() const { return flying; }
 uint8_t Player::getViewDistance() const { return viewDistance; }
 bool Player::isSneaking() const { return sneaking; }
@@ -97,10 +98,6 @@ void Player::kill() {
         other->getConnection()->send_packet(metadataPacket);
         other->getConnection()->send_packet(damagePacket);
         other->getConnection()->send_packet(deathPacket);
-    }
-
-    // 3. Сообщение в чат
-    for (const auto& other : PlayerList::getInstance().getPlayers()) {
         other->sendChatMessage(nickname + " умер!");
     }
 
@@ -153,13 +150,10 @@ void Player::disconnect() const {
     const auto& remainingPlayers = PlayerList::getInstance().getPlayers();
 
     // Отправляем сообщения и пакеты оставшимся игрокам
+    DestroyEntitiesPacket destroyPacket({getId()});
     for (const auto& client : remainingPlayers) {
         client->sendChatMessage(nickname + " left the game", ChatColor::YELLOW);
-    }
-
-    DestroyEntitiesPacket destroyPacket({getId()});
-    for (const auto& p : remainingPlayers) {
-        p->getConnection()->send_packet(destroyPacket);
+        client->getConnection()->send_packet(destroyPacket);
     }
 
     // Закрываем соединение

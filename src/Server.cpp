@@ -1,4 +1,5 @@
 #include <memory>
+#include <atomic>
 #include "Server.h"
 #include "commands/CommandRegistry.h"
 #include "console/Logger.h"
@@ -6,31 +7,13 @@
 #include "crypto/RSA.h"
 #include "utility/ConfigValidator.h"
 #include "game/world/WorldGenerator.h"
-#include "network/packet/inbound/handshake/HandshakePacket.h"
-#include "network/packet/inbound/status/StatusRequestPacket.h"
-#include "network/packet/inbound/status/StatusPingPacket.h"
-#include "network/packet/inbound/login/LoginStartPacket.h"
-#include "network/packet/inbound/login/EncryptionResponsePacket.h"
-#include "network/packet/inbound/play/KeepAlivePacketPlay.h"
-#include "network/packet/inbound/play/TeleportConfirmPacket.h"
-#include "network/packet/inbound/play/ClientStatusPacket.h"
-#include "network/packet/inbound/play/GetChatMessagePacket.h"
-#include "network/packet/inbound/play/PlayerPositionPacket.h"
-#include "network/packet/inbound/play/BlockDigRequestPacket.h"
-#include "network/packet/inbound/play/HeldItemChangePacket.h"
-#include "network/packet/inbound/play/SetCreativeSlotPacket.h"
-#include "network/packet/inbound/play/ArmAnimationPacket.h"
-#include "network/packet/inbound/play/BlockPlacePacket.h"
-#include "network/packet/inbound/play/ClientAbilitiesPacket.h"
-#include "network/packet/inbound/play/EntityActionPacket.h"
-#include "network/packet/inbound/play/ClientSettingsPacket.h"
-#include "commands/gameCommands/PingCommand.h"
-#include "commands/gameCommands/KillCommand.h"
-#include "commands/gameCommands/HelpGameCommand.h"
-#include "commands/gameCommands/TimeCommand.h"
-#include "commands/consoleCommands/HelpCommand.h"
+#include "network/PacketRegistry.h"
+#include "commands/CommandRegistry.h"
 
 Server* Server::instance;
+
+void register_all_packets(PacketRegistry& registry);
+void register_all_commands(CommandRegistry& registry);
 
 Server::Server(boost::asio::io_context& io_context)
     : acceptor_(io_context), io_context_(io_context), tick_timer_(io_context) {
@@ -40,10 +23,12 @@ Server::Server(boost::asio::io_context& io_context)
     config = ConfigValidator::load_and_validate("config.toml");
     LOG_INFO("Configuration loaded and validated.");
 
-    world = std::make_unique<World>(std::make_unique<FlatWorldGenerator>());
+    const std::string worldName = config["world"]["name"].value_or("world");
+    world = std::make_unique<World>(std::make_unique<FlatWorldGenerator>(), worldName);
 
     const int port = config["server"]["port"].value_or(25565);
     const std::string ip = config["server"]["ip"].value_or("0.0.0.0");
+    LOG_INFO("Starting server on " + ip + ":" + std::to_string(port));
 
     if (!config["server"]["online_mode"].value_or(false)) {
         LOG_WARN("SERVER IS RUNNING IN OFFLINE/INSECURE MODE!");
@@ -70,12 +55,14 @@ Server::Server(boost::asio::io_context& io_context)
     cur_rsa = nullptr;
     boost::asio::post(io_context_, [this]() { init_rsa_async(); });
 
-    register_packets();
-    register_commands();
+    register_all_packets(packet_registry_);
+    register_all_commands(command_registry_);
 
     console_manager_ = std::make_unique<ConsoleManager>(io_context_);
 
-    LOG_INFO("Server started on " + ip + ":" + std::to_string(port));
+    pre_generate_world();
+
+    LOG_INFO("Waiting for players...");
     start_accept();
 }
 
@@ -125,42 +112,24 @@ std::vector<uint8_t> Server::decrypt_rsa(const std::vector<uint8_t>& data) const
     return rsa::decrypt(cur_rsa, data);
 }
 
-void Server::register_packets() {
-    packet_registry_.registerPacket(State::HANDSHAKE, 0x00, []{ return std::make_unique<HandshakePacket>(); });
+void Server::pre_generate_world() {
+    LOG_INFO("Pre-generating world...");
+    const int radius = 8;
+    const int total_chunks = (2 * radius) * (2 * radius);
+    auto chunks_generated = std::make_shared<std::atomic<int>>(0);
 
-    packet_registry_.registerPacket(State::STATUS, 0x00, []{ return std::make_unique<StatusRequestPacket>(); });
-    packet_registry_.registerPacket(State::STATUS, 0x01, []{ return std::make_unique<StatusPingPacket>(); });
-
-    packet_registry_.registerPacket(State::LOGIN, 0x00, []{ return std::make_unique<LoginStartPacket>(); });
-    packet_registry_.registerPacket(State::LOGIN, 0x01, []{ return std::make_unique<EncryptionResponsePacket>(); });
-
-    packet_registry_.registerPacket(State::PLAY, 0x00, []{ return std::make_unique<TeleportConfirmPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x03, []{ return std::make_unique<GetChatMessagePacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x04, []{ return std::make_unique<ClientStatusPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x05, []{ return std::make_unique<ClientSettingsPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x10, []{ return std::make_unique<KeepAlivePacketPlay>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x12, []{ return std::make_unique<PlayerPositionPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x13, []{ return std::make_unique<PlayerPositionAndRotationPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x14, []{ return std::make_unique<PlayerRotationPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x15, []{ return std::make_unique<PlayerOnGroundPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x1A, []{ return std::make_unique<ClientAbilitiesPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x1C, []{ return std::make_unique<EntityActionPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x1b, []{ return std::make_unique<BlockDigRequestPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x25, []{ return std::make_unique<HeldItemChangePacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x28, []{ return std::make_unique<SetCreativeSlotPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x2C, []{ return std::make_unique<ArmAnimationPacket>(); });
-    packet_registry_.registerPacket(State::PLAY, 0x2E, []{ return std::make_unique<BlockPlacePacket>(); });
-}
-
-void Server::register_commands() {
-    // Console Commands
-    command_registry_.registerConsoleCommand(std::make_unique<HelpCommand>());
-
-    // Game Commands
-    command_registry_.registerGameCommand(std::make_unique<PingCommand>());
-    command_registry_.registerGameCommand(std::make_unique<KillCommand>());
-    command_registry_.registerGameCommand(std::make_unique<TimeCommand>());
-    command_registry_.registerGameCommand(std::make_unique<HelpGameCommand>());
+    for (int x = -radius; x < radius; ++x) {
+        for (int z = -radius; z < radius; ++z) {
+            world->getOrGenerateChunk(x, z, [chunks_generated, total_chunks](ChunkColumn* chunk) {
+                if (chunk) {
+                    int generated_count = ++(*chunks_generated);
+                    if (generated_count == total_chunks) {
+                        LOG_INFO("World pre-generation complete.");
+                    }
+                }
+            });
+        }
+    }
 }
 
 void Server::start_accept() {

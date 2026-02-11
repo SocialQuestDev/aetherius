@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <vector>
+#include <arpa/inet.h>
 
 #include "other/Vector3.h"
 
@@ -32,21 +33,20 @@ int16_t PacketBuffer::readShort() {
     if (readerIndex + 2 > data.size()) {
         throw std::runtime_error("Buffer overflow: readShort");
     }
-    int16_t res = (data[readerIndex] << 8) | data[readerIndex + 1];
+    int16_t res;
+    std::memcpy(&res, &data[readerIndex], 2);
     readerIndex += 2;
-    return res;
+    return ntohs(res);
 }
 
 int32_t PacketBuffer::readInt() {
     if (readerIndex + 4 > data.size()) {
         throw std::runtime_error("Buffer overflow: readInt");
     }
-    int32_t res = (static_cast<uint32_t>(data[readerIndex]) << 24) |
-                  (static_cast<uint32_t>(data[readerIndex + 1]) << 16) |
-                  (static_cast<uint32_t>(data[readerIndex + 2]) << 8) |
-                  (static_cast<uint32_t>(data[readerIndex + 3]));
+    int32_t res;
+    std::memcpy(&res, &data[readerIndex], 4);
     readerIndex += 4;
-    return res;
+    return ntohl(res);
 }
 
 float PacketBuffer::readFloat() {
@@ -54,12 +54,10 @@ float PacketBuffer::readFloat() {
         throw std::runtime_error("Buffer overflow: readFloat");
     }
 
-    uint32_t val = (static_cast<uint32_t>(data[readerIndex])     << 24) |
-                   (static_cast<uint32_t>(data[readerIndex + 1]) << 16) |
-                   (static_cast<uint32_t>(data[readerIndex + 2]) << 8)  |
-                    static_cast<uint32_t>(data[readerIndex + 3]);
-
+    uint32_t val;
+    std::memcpy(&val, &data[readerIndex], 4);
     readerIndex += 4;
+    val = ntohl(val);
 
     float res;
     std::memcpy(&res, &val, sizeof(float));
@@ -71,15 +69,14 @@ double PacketBuffer::readDouble() {
         throw std::runtime_error("Buffer overflow: readDouble expecting Float64");
     }
 
-    uint64_t val = 0;
-    for (int i = 0; i < 8; i++) {
-        val = (val << 8) | data[readerIndex++];
-    }
+    uint64_t val;
+    std::memcpy(&val, &data[readerIndex], 8);
+    readerIndex += 8;
+    val = be64toh(val);
 
-    double tempRes;
-    std::memcpy(&tempRes, &val, sizeof(double));
-
-    return static_cast<double>(tempRes);
+    double res;
+    std::memcpy(&res, &val, sizeof(double));
+    return res;
 }
 
 // Убедись, что readUShort у тебя такой же (Big Endian)
@@ -87,9 +84,10 @@ unsigned short PacketBuffer::readUShort() {
     if (readerIndex + 2 > data.size()) {
         throw std::runtime_error("Buffer overflow: readUShort");
     }
-    unsigned short res = (data[readerIndex] << 8) | data[readerIndex + 1];
+    unsigned short res;
+    std::memcpy(&res, &data[readerIndex], 2);
     readerIndex += 2;
-    return res;
+    return ntohs(res);
 }
 
 std::vector<uint8_t> PacketBuffer::readByteArray() {
@@ -134,22 +132,20 @@ int64_t PacketBuffer::readLong() {
     if (readerIndex + 8 > data.size()) {
         throw std::runtime_error("Buffer overflow: trying to read long beyond data size");
     }
-    int64_t res = 0;
-    for (int i = 0; i < 8; i++) {
-        res = (res << 8) | data[readerIndex++];
-    }
-    return res;
+    int64_t res;
+    std::memcpy(&res, &data[readerIndex], 8);
+    readerIndex += 8;
+    return be64toh(res);
 }
 
 uint64_t PacketBuffer::readULong() {
     if (readerIndex + 8 > data.size()) {
         throw std::runtime_error("Buffer overflow: trying to read ulong beyond data size");
     }
-    uint64_t res = 0;
-    for (int i = 0; i < 8; i++) {
-        res = (res << 8) | data[readerIndex++];
-    }
-    return res;
+    uint64_t res;
+    std::memcpy(&res, &data[readerIndex], 8);
+    readerIndex += 8;
+    return be64toh(res);
 }
 
 UUID PacketBuffer::readUUID() {
@@ -249,25 +245,27 @@ void PacketBuffer::writeString(const std::string &str) {
 }
 
 void PacketBuffer::writeShort(int16_t value) {
-    writeByte((value >> 8) & 0xFF);
-    writeByte(value & 0xFF);
+    int16_t be_value = htons(value);
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&be_value);
+    data.insert(data.end(), bytes, bytes + 2);
 }
 
 void PacketBuffer::writeInt(int32_t value) {
-    writeByte((value >> 24) & 0xFF);
-    writeByte((value >> 16) & 0xFF);
-    writeByte((value >> 8) & 0xFF);
-    writeByte(value & 0xFF);
+    int32_t be_value = htonl(value);
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&be_value);
+    data.insert(data.end(), bytes, bytes + 4);
 }
 
 void PacketBuffer::writeLong(int64_t value) {
-    for (int i = 7; i >= 0; i--) {
-        writeByte((value >> (i * 8)) & 0xFF);
-    }
+    int64_t be_value = htobe64(value);
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&be_value);
+    data.insert(data.end(), bytes, bytes + 8);
 }
 
 void PacketBuffer::writeULong(uint64_t value) {
-    for(int i=7; i>=0; i--) writeByte((value >> (i*8)) & 0xFF);
+    uint64_t be_value = htobe64(value);
+    const auto* bytes = reinterpret_cast<const uint8_t*>(&be_value);
+    data.insert(data.end(), bytes, bytes + 8);
 }
 
 void PacketBuffer::writeUUID(uint64_t high, uint64_t low) {

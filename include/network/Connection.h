@@ -54,6 +54,7 @@ public:
     std::shared_ptr<Player> getPlayer() const;
 
     void send_join_game();
+    void broadcast_player_join();
     void start_keep_alive_timer();
     int getPing() const;
     void update_chunks();
@@ -69,7 +70,6 @@ private:
     explicit Connection(boost::asio::io_context& io_context);
 
     void do_read();
-    void handle_packet(std::vector<uint8_t>& rawData);
     void send_light_data(int chunkX, int chunkZ);
     void send_keep_alive();
 

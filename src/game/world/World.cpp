@@ -1,66 +1,174 @@
 #include "game/world/World.h"
 #include "game/nbt/NbtBuilder.h"
+#include "game/player/PlayerList.h"
+#include "console/Logger.h"
 #include <cmath>
 #include <boost/asio/post.hpp>
+#include <vector>
+#include <set>
+#include <thread>
 
-World::World(std::unique_ptr<WorldGenerator> generator)
+World::World(std::unique_ptr<WorldGenerator> generator, const std::string& worldName)
     : generator(std::move(generator)),
+      storage(std::make_unique<WorldStorage>(worldName)),
       thread_pool_(std::make_unique<boost::asio::thread_pool>(std::thread::hardware_concurrency())) {}
 
 ChunkColumn* World::getChunk(int x, int z) {
     std::lock_guard<std::mutex> lock(chunks_mutex_);
     auto it = chunks.find({x, z});
     if (it != chunks.end()) {
+        it->second.touch();
         return &it->second;
     }
     return nullptr;
 }
 
-ChunkColumn* World::generateChunk(int x, int z) {
-    ChunkColumn chunk;
-    chunk.x = x;
-    chunk.z = z;
-    generator->generateChunk(chunk);
+void World::getOrGenerateChunk(int x, int z, std::function<void(ChunkColumn*)> callback) {
+    if (auto* chunk = getChunk(x, z)) {
+        callback(chunk);
+        return;
+    }
 
-    std::lock_guard<std::mutex> lock(chunks_mutex_);
-    auto [it, success] = chunks.emplace(std::make_pair(x, z), chunk);
-    return &it->second;
-}
+    boost::asio::post(*thread_pool_, [this, x, z, callback]() {
+        if (auto* chunk = getChunk(x, z)) {
+            callback(chunk);
+            return;
+        }
 
-std::future<ChunkColumn*> World::generateChunkAsync(int x, int z) {
-    auto promise = std::make_shared<std::promise<ChunkColumn*>>();
-    auto future = promise->get_future();
+        std::lock_guard<std::mutex> gen_lock(generation_mutex_);
+        if (auto* chunk = getChunk(x, z)) {
+            callback(chunk);
+            return;
+        }
 
-    boost::asio::post(*thread_pool_, [this, x, z, promise]() {
-        try {
-            ChunkColumn chunk;
-            chunk.x = x;
-            chunk.z = z;
-            generator->generateChunk(chunk);
+        auto chunk = std::make_unique<ChunkColumn>();
+        chunk->x = x;
+        chunk->z = z;
+
+        if (storage->loadChunk(x, z, *chunk)) {
+            std::lock_guard<std::mutex> lock(chunks_mutex_);
+            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(*chunk));
+            it->second.touch();
+            callback(&it->second);
+        } else {
+            generator->generateChunk(*chunk);
+            asyncSaveChunk(*chunk);
 
             std::lock_guard<std::mutex> lock(chunks_mutex_);
-            auto [it, success] = chunks.emplace(std::make_pair(x, z), chunk);
-            promise->set_value(&it->second);
-        } catch (...) {
-            promise->set_exception(std::current_exception());
+            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(*chunk));
+            it->second.touch();
+            callback(&it->second);
         }
     });
+}
 
-    return future;
+void World::asyncSaveChunk(const ChunkColumn& chunk) {
+    auto chunk_copy = std::make_shared<ChunkColumn>(chunk);
+    boost::asio::post(*thread_pool_, [this, chunk_copy]() {
+        storage->saveChunk(*chunk_copy);
+    });
+}
+
+void World::syncSaveAllChunks() {
+    std::lock_guard<std::mutex> lock(chunks_mutex_);
+    for (const auto& pair : chunks) {
+        storage->saveChunk(pair.second);
+    }
+}
+
+void World::updateChunkStatuses() {
+    std::set<std::pair<int, int>> active_chunks_coords;
+    const int ticking_radius = 2;
+
+    for (const auto& player : PlayerList::getInstance().getPlayers()) {
+        Vector3 pos = player->getPosition();
+        int chunkX = static_cast<int>(std::floor(pos.x / 16.0));
+        int chunkZ = static_cast<int>(std::floor(pos.z / 16.0));
+
+        for (int x = -ticking_radius; x <= ticking_radius; ++x) {
+            for (int z = -ticking_radius; z <= ticking_radius; ++z) {
+                active_chunks_coords.insert({chunkX + x, chunkZ + z});
+            }
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(chunks_mutex_);
+    for (auto& [pos, chunk] : chunks) {
+        if (active_chunks_coords.contains(pos)) {
+            chunk.status = ChunkStatus::TICKING;
+        } else {
+            chunk.status = ChunkStatus::VISUAL;
+        }
+    }
+}
+
+void World::unloadInactiveChunks() {
+    const auto unload_threshold = std::chrono::seconds(30);
+    std::vector<std::pair<int, int>> to_unload_coords;
+
+    std::set<std::pair<int, int>> keep_alive_chunks;
+    for (const auto& player : PlayerList::getInstance().getPlayers()) {
+        Vector3 pos = player->getPosition();
+        int chunkX = static_cast<int>(std::floor(pos.x / 16.0));
+        int chunkZ = static_cast<int>(std::floor(pos.z / 16.0));
+        int view_dist = player->getViewDistance() + 1;
+        for (int x = -view_dist; x <= view_dist; ++x) {
+            for (int z = -view_dist; z <= view_dist; ++z) {
+                keep_alive_chunks.insert({chunkX + x, chunkZ + z});
+            }
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(chunks_mutex_);
+        for (auto const& [pos, chunk] : chunks) {
+            if (!keep_alive_chunks.contains(pos)) {
+                if (std::chrono::steady_clock::now() - chunk.last_accessed > unload_threshold) {
+                    to_unload_coords.push_back(pos);
+                }
+            }
+        }
+    }
+
+    if (!to_unload_coords.empty()) {
+        for (const auto& pos : to_unload_coords) {
+            boost::asio::post(*thread_pool_, [this, pos, &unload_threshold]() {
+                ChunkColumn chunk_copy;
+                bool should_erase = false;
+
+                {
+                    std::lock_guard<std::mutex> lock(chunks_mutex_);
+                    auto it = chunks.find(pos);
+                    if (it != chunks.end()) {
+                        if (std::chrono::steady_clock::now() - it->second.last_accessed > unload_threshold) {
+                            chunk_copy = it->second;
+                            should_erase = true;
+                        }
+                    }
+                }
+
+                if (should_erase) {
+                    storage->saveChunk(chunk_copy);
+
+                    std::lock_guard<std::mutex> lock(chunks_mutex_);
+                    chunks.erase(pos);
+                }
+            });
+        }
+        LOG_DEBUG("Scheduled " + std::to_string(to_unload_coords.size()) + " inactive chunks for unloading.");
+    }
 }
 
 int World::getBlock(const Vector3& position) {
-    int chunkX = floor(position.x / 16.0);
-    int chunkZ = floor(position.z / 16.0);
+    int chunkX = static_cast<int>(floor(position.x / 16.0));
+    int chunkZ = static_cast<int>(floor(position.z / 16.0));
 
     ChunkColumn* chunk = getChunk(chunkX, chunkZ);
-    if (!chunk) {
-        return 0; // Air
-    }
+    if (!chunk) return 0;
 
-    int blockX = (int)floor(position.x) % 16;
-    int blockY = (int)floor(position.y);
-    int blockZ = (int)floor(position.z) % 16;
+    int blockX = static_cast<int>(floor(position.x)) % 16;
+    int blockY = static_cast<int>(floor(position.y));
+    int blockZ = static_cast<int>(floor(position.z)) % 16;
     if (blockX < 0) blockX += 16;
     if (blockZ < 0) blockZ += 16;
 
@@ -68,23 +176,40 @@ int World::getBlock(const Vector3& position) {
 }
 
 void World::setBlock(const Vector3& position, int blockId) {
-    int chunkX = floor(position.x / 16.0);
-    int chunkZ = floor(position.z / 16.0);
+    int chunkX = static_cast<int>(floor(position.x / 16.0));
+    int chunkZ = static_cast<int>(floor(position.z / 16.0));
 
     ChunkColumn* chunk = getChunk(chunkX, chunkZ);
-    if (!chunk) {
-        // For simplicity, we won't place blocks in unloaded chunks.
-        // A full implementation might load or generate the chunk here.
-        return;
-    }
+    if (!chunk) return;
 
-    int blockX = (int)floor(position.x) % 16;
-    int blockY = (int)floor(position.y);
-    int blockZ = (int)floor(position.z) % 16;
+    int blockX = static_cast<int>(floor(position.x)) % 16;
+    int blockY = static_cast<int>(floor(position.y));
+    int blockZ = static_cast<int>(floor(position.z)) % 16;
     if (blockX < 0) blockX += 16;
     if (blockZ < 0) blockZ += 16;
 
     chunk->setBlock(blockX, blockY, blockZ, blockId);
+    asyncSaveChunk(*chunk); // Use async save
+}
+
+void World::tick() {
+    worldAge++;
+    timeOfDay = (timeOfDay + 1) % 24000;
+
+    if (worldAge % 20 == 0) {
+        updateChunkStatuses();
+    }
+
+    if (worldAge % 200 == 0) {
+        unloadInactiveChunks();
+    }
+
+    std::lock_guard<std::mutex> lock(chunks_mutex_);
+    for (auto& [pos, chunk] : chunks) {
+        if (chunk.status == ChunkStatus::TICKING) {
+            // TODO: Add entity processing, random block updates, etc.
+        }
+    }
 }
 
 std::vector<uint8_t> World::getDimension() {
@@ -255,11 +380,6 @@ std::vector<uint8_t> World::getDimensionCodec() {
         nbt.endCompound(); // End biome compound
     nbt.endCompound(); // End Root
     return nbt.buffer;
-}
-
-void World::tick() {
-    worldAge++;
-    timeOfDay = (timeOfDay + 1) % 24000;
 }
 
 int64_t World::getWorldAge() const {

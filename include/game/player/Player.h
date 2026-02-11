@@ -8,12 +8,11 @@
 #include "other/Vector3.h"
 #include "other/Vector2.h"
 #include "other/ChatColor.h"
-#include "PlayerData.h"
 
-class Connection; // Forward declaration
-class Packet;     // Forward declaration
+// Forward declare to avoid circular dependencies
+class Connection;
+class Packet;
 
-// Placeholder for an item stack
 struct Slot {
     int itemId = 0;
     int count = 0;
@@ -55,7 +54,11 @@ public:
     bool isOnGround() const;
     short getHeldItemSlot() const;
     Gamemode getGamemode() const;
-    const std::vector<Slot>& getInventory() const;
+
+    // Overloaded getInventory()
+    const std::vector<Slot>& getInventory() const; // For read-only access
+    std::vector<Slot>& getInventory();             // For read-write access
+
     bool isFlying() const;
     uint8_t getViewDistance() const;
     bool isSneaking() const;
@@ -91,6 +94,7 @@ public:
     void teleportToSpawn();
     void disconnect() const;
     void sendChatMessage(const std::string &message, ChatColor color = ChatColor::WHITE, UUID senderUuid = UUID()) const;
+
 private:
     int id;
     UUID uuid;

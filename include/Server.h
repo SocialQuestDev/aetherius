@@ -35,6 +35,7 @@ private:
     void register_packets();
     void register_commands();
     void init_rsa_async();
+    void pre_generate_world();
     void tick();
 
     tcp::acceptor acceptor_;

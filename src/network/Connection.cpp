@@ -239,18 +239,21 @@ void Connection::send_join_game() {
     PlayerPositionAndLookPacket posLookPacket(pos.x, pos.y, pos.z, rot.x, rot.y, 0x00, player->getId());
     send_packet(posLookPacket);
 
-    // Send own metadata to the joining player
     Metadata ownMetadata;
-    ownMetadata.addByte(16, player->getDisplayedSkinParts()); // Displayed skin parts
+    ownMetadata.addByte(16, player->getDisplayedSkinParts());
     EntityMetadataPacket ownMeta(player->getId(), ownMetadata);
     send_packet(ownMeta);
 
-    // Send current world time to the joining player
     World& world = Server::get_instance().get_world();
     TimeUpdatePacket timePacket(world.getWorldAge(), world.getTimeOfDay());
     send_packet(timePacket);
 
-    // Get existing players (excluding the current player who just joined)
+    boost::asio::post(Server::get_instance().get_io_context(), [self = shared_from_this()]() {
+        self->broadcast_player_join();
+    });
+}
+
+void Connection::broadcast_player_join() {
     const auto& allPlayers = PlayerList::getInstance().getPlayers();
     std::vector<std::shared_ptr<Player>> existingPlayers;
     for (const auto& p : allPlayers) {
@@ -262,22 +265,19 @@ void Connection::send_join_game() {
     PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
     PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, allPlayers);
     send_packet(addExistingToCurrent);
+
     if (!existingPlayers.empty()) {
         SpawnNamedEntityPacket spawnCurrent(player);
-
-        // Prepare metadata for the new player
         Metadata currentMetadata;
         currentMetadata.addByte(16, player->getDisplayedSkinParts());
         EntityMetadataPacket currentMeta(player->getId(), currentMetadata);
         send_packet(currentMeta);
 
         for (const auto& p : existingPlayers) {
-            // Send to existing players: info about new player
             p->getConnection()->send_packet(addCurrentToAll);
             p->getConnection()->send_packet(spawnCurrent);
             p->getConnection()->send_packet(currentMeta);
 
-            // Send to new player: info about existing players
             SpawnNamedEntityPacket spawnExisting(p);
             send_packet(spawnExisting);
 
@@ -289,53 +289,6 @@ void Connection::send_join_game() {
     }
 
     LOG_INFO(nickname + " (" + std::to_string(player->getId()) + ") joined the game");
-}
-
-
-void Connection::handle_packet(std::vector<uint8_t>& rawData) {
-    // Этот метод, похоже, дублирует process_incoming_buffer. Оставляю его как есть.
-    PacketBuffer raw(rawData);
-    try {
-        Server& server = Server::get_instance();
-
-        while (raw.readerIndex < raw.data.size()) {
-            int packetLength = raw.readVarInt();
-            if (packetLength < 1 || (raw.readerIndex + packetLength) > raw.data.size()) break;
-
-            std::vector<uint8_t> payload;
-            if (compression_enabled) {
-                size_t startIdx = raw.readerIndex;
-                int dataLength = raw.readVarInt();
-                int remainingBytes = packetLength - (int)(raw.readerIndex - startIdx);
-
-                if (dataLength > 0) {
-                    payload.resize(dataLength);
-                    unsigned long destLen = dataLength;
-                    uncompress(payload.data(), &destLen, raw.data.data() + raw.readerIndex, remainingBytes);
-                    raw.readerIndex += remainingBytes;
-                } else {
-                    payload.assign(raw.data.begin() + raw.readerIndex, raw.data.begin() + raw.readerIndex + remainingBytes);
-                    raw.readerIndex += remainingBytes;
-                }
-            } else {
-                payload.assign(raw.data.begin() + raw.readerIndex, raw.data.begin() + raw.readerIndex + packetLength);
-                raw.readerIndex += packetLength;
-            }
-
-            PacketBuffer reader(payload);
-            int packetID = reader.readVarInt();
-
-            auto packet = server.get_packet_registry().createPacket(state_, packetID);
-            if (packet) {
-                packet->read(reader);
-                packet->handle(*this);
-            } else {
-                LOG_WARN("Unhandled packet ID: " + std::to_string(packetID) + " in state " + std::to_string((int)state_));
-            }
-        }
-    } catch (const std::exception& e) {
-        LOG_ERROR("Packet error: " + std::string(e.what()));
-    }
 }
 
 std::vector<uint8_t> Connection::finalize_packet(PacketBuffer& packet){
@@ -400,40 +353,39 @@ void Connection::update_chunks() {
     int chunkX = static_cast<int>(std::floor(pos.x / 16.0));
     int chunkZ = static_cast<int>(std::floor(pos.z / 16.0));
 
-    // Check if player moved to a different chunk
     if (chunkX == last_chunk_x_ && chunkZ == last_chunk_z_) {
         return;
     }
 
-    // Update ViewPosition packet
     PacketBuffer vp;
     vp.writeVarInt(0x40);
     vp.writeVarInt(chunkX);
     vp.writeVarInt(chunkZ);
     send_packet(vp);
 
-    // Load new chunks around player
     Server& server = Server::get_instance();
     World& world = server.get_world();
-
     int viewDistance = player->getViewDistance();
+
     for (int x = -viewDistance; x <= viewDistance; ++x) {
         for (int z = -viewDistance; z <= viewDistance; ++z) {
             int cx = chunkX + x;
             int cz = chunkZ + z;
 
-            // Check if this chunk was already loaded
             bool wasLoaded = (std::abs(cx - last_chunk_x_) <= viewDistance &&
                             std::abs(cz - last_chunk_z_) <= viewDistance &&
                             last_chunk_x_ != 0 && last_chunk_z_ != 0);
 
             if (!wasLoaded) {
-                ChunkColumn* chunk = world.generateChunk(cx, cz);
-                PacketBuffer cp;
-                cp.writeVarInt(0x20);
-                auto p = chunk->serialize();
-                cp.data.insert(cp.data.end(), p.begin(), p.end());
-                send_packet(cp);
+                world.getOrGenerateChunk(cx, cz, [this, self = shared_from_this()](ChunkColumn* chunk) {
+                    if (socket_.is_open() && chunk) {
+                        PacketBuffer cp;
+                        cp.writeVarInt(0x20);
+                        auto p = chunk->serialize();
+                        cp.data.insert(cp.data.end(), p.begin(), p.end());
+                        send_packet(cp);
+                    }
+                });
             }
         }
     }
