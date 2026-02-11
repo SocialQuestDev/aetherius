@@ -138,21 +138,23 @@ void Player::disconnect() const {
         return;
     }
 
-    for (const auto& client: PlayerList::getInstance().getPlayers()) {
-        if (client->getId() != getId()) {
-            client->sendChatMessage(nickname + " left the game", ChatColor::YELLOW);
-        }
+    // Сначала удаляем игрока из списка, чтобы избежать повторного вызова disconnect
+    PlayerList::getInstance().removePlayer(getId());
+
+    // Собираем список оставшихся игроков
+    const auto& remainingPlayers = PlayerList::getInstance().getPlayers();
+
+    // Отправляем сообщения и пакеты оставшимся игрокам
+    for (const auto& client : remainingPlayers) {
+        client->sendChatMessage(nickname + " left the game", ChatColor::YELLOW);
     }
 
     DestroyEntitiesPacket destroyPacket({getId()});
-    for (const auto& p : PlayerList::getInstance().getPlayers()) {
-        if (p->getId() != getId()) {
-            p->getConnection()->send_packet(destroyPacket);
-        }
+    for (const auto& p : remainingPlayers) {
+        p->getConnection()->send_packet(destroyPacket);
     }
 
-    PlayerList::getInstance().removePlayer(getId());
-
+    // Закрываем соединение
     boost::system::error_code ec;
     connection->socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
     connection->socket().close(ec);

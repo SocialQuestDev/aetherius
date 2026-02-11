@@ -13,21 +13,4 @@ void SpawnNamedEntityPacket::write(PacketBuffer& buffer) {
     buffer.writeDouble(player->getPosition().z);
     buffer.writeByte(static_cast<int8_t>(player->getRotation().x * 256.0f / 360.0f));
     buffer.writeByte(static_cast<int8_t>(player->getRotation().y * 256.0f / 360.0f));
-
-    // Initial Entity Metadata
-    // В методе инициализации игрока или спавна:
-    Metadata metadata;
-    metadata.addByte(16, 0x7F); // Включаем все слои (0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40)
-    // Отправить пакет SetEntityMetadata
-
-    uint8_t statusFlags = 0;
-    if (player->isSneaking()) statusFlags |= 0x02;
-    if (player->isSprinting()) statusFlags |= 0x08;
-    metadata.addByte(0, statusFlags); // Status flags
-
-    metadata.addPose(6, player->isSneaking() ? 5 : 0); // Pose
-
-    metadata.addByte(7, static_cast<uint8_t>(player->getMainHand())); // Main hand
-
-    metadata.write(buffer);
 }

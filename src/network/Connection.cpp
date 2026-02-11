@@ -241,27 +241,41 @@ void Connection::send_join_game() {
     TimeUpdatePacket timePacket(world.getWorldAge(), world.getTimeOfDay());
     send_packet(timePacket);
 
-    const auto& existingPlayers = PlayerList::getInstance().getPlayers();
-    if (!existingPlayers.empty()) {
-        PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
-        PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, existingPlayers);
-        send_packet(addExistingToCurrent);
+    // Get existing players (excluding the current player who just joined)
+    const auto& allPlayers = PlayerList::getInstance().getPlayers();
+    std::vector<std::shared_ptr<Player>> existingPlayers;
+    for (const auto& p : allPlayers) {
+        if (p->getId() != player->getId()) {
+            existingPlayers.push_back(p);
+        }
+    }
 
+    PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
+    PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, allPlayers);
+    send_packet(addExistingToCurrent);
+    if (!existingPlayers.empty()) {
         SpawnNamedEntityPacket spawnCurrent(player);
 
+        // Prepare metadata for the new player
+        Metadata currentMetadata;
+        currentMetadata.addByte(16, player->getDisplayedSkinParts());
+        EntityMetadataPacket currentMeta(player->getId(), currentMetadata);
+        send_packet(currentMeta);
+
         for (const auto& p : existingPlayers) {
-            if (p->getId() != player->getId()) {
-                p->getConnection()->send_packet(addCurrentToAll);
-                p->getConnection()->send_packet(spawnCurrent);
+            // Send to existing players: info about new player
+            p->getConnection()->send_packet(addCurrentToAll);
+            p->getConnection()->send_packet(spawnCurrent);
+            p->getConnection()->send_packet(currentMeta);
 
-                SpawnNamedEntityPacket spawnExisting(p);
-                send_packet(spawnExisting);
+            // Send to new player: info about existing players
+            SpawnNamedEntityPacket spawnExisting(p);
+            send_packet(spawnExisting);
 
-                Metadata existingMetadata;
-                existingMetadata.addByte(16, p->getDisplayedSkinParts());
-                EntityMetadataPacket existingMeta(p->getId(), existingMetadata);
-                send_packet(existingMeta);
-            }
+            Metadata existingMetadata;
+            existingMetadata.addByte(16, p->getDisplayedSkinParts());
+            EntityMetadataPacket existingMeta(p->getId(), existingMetadata);
+            send_packet(existingMeta);
         }
     }
 
