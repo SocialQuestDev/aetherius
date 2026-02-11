@@ -14,6 +14,7 @@
 #include "network/packet/outbound/play/SpawnNamedEntityPacket.h"
 #include "network/packet/outbound/play/DeclareCommandsPacket.h"
 #include "network/packet/outbound/play/EntityMetadataPacket.h"
+#include "network/packet/outbound/play/TimeUpdatePacket.h"
 #include "network/Metadata.h"
 
 #include <toml++/toml.hpp>
@@ -70,6 +71,10 @@ std::string Connection::get_nickname() const {
     return nickname;
 }
 
+void Connection::set_protocol_version(int version) { protocol_version = version; }
+
+int Connection::get_protocol_version() const { return protocol_version; }
+
 void Connection::set_verify_token(const std::vector<uint8_t>& token) {
     this->verify_token = std::make_unique<std::vector<uint8_t>>(token);
 }
@@ -97,7 +102,7 @@ void Connection::enable_encryption(const std::vector<uint8_t>& shared_secret) {
 
 void Connection::do_read() {
     auto self(shared_from_this());
-    
+
     socket_.async_read_some(boost::asio::buffer(buffer_),
         [this, self](const boost::system::error_code &ec, const std::size_t length) {
             if (!ec) {
@@ -108,6 +113,7 @@ void Connection::do_read() {
                 process_incoming_buffer();
                 do_read();
             } else {
+                keep_alive_timer_.cancel();
                 if (player) player->disconnect();
                 LOG_DEBUG("Connection closed: " + ec.message());
             }
@@ -185,6 +191,7 @@ void Connection::process_incoming_buffer() {
 
     } catch (const std::exception& e) {
         LOG_ERROR("Buffer processing error: " + std::string(e.what()));
+        keep_alive_timer_.cancel();
         if (player) player->disconnect();
     }
 }
@@ -222,6 +229,17 @@ void Connection::send_join_game() {
     send_packet(commandsPacket);
 
     player->teleportToSpawn();
+
+    // Send own metadata to the joining player
+    Metadata ownMetadata;
+    ownMetadata.addByte(16, player->getDisplayedSkinParts()); // Displayed skin parts
+    EntityMetadataPacket ownMeta(player->getId(), ownMetadata);
+    send_packet(ownMeta);
+
+    // Send current world time to the joining player
+    World& world = Server::get_instance().get_world();
+    TimeUpdatePacket timePacket(world.getWorldAge(), world.getTimeOfDay());
+    send_packet(timePacket);
 
     const auto& existingPlayers = PlayerList::getInstance().getPlayers();
     if (!existingPlayers.empty()) {
@@ -344,6 +362,7 @@ void Connection::do_write() {
                     do_write();
                 } else {
                     writing_ = false;
+                    keep_alive_timer_.cancel();
                     if (player) player->disconnect();
                 }
             }));

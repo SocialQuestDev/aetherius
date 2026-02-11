@@ -26,6 +26,7 @@ public:
     CommandRegistry& get_command_registry();
     void start_console();
     void async_init();
+    void start_tick_system();
 
 private:
     void start_accept();
@@ -33,6 +34,7 @@ private:
     void register_packets();
     void register_commands();
     void init_rsa_async();
+    void tick();
 
     tcp::acceptor acceptor_;
     boost::asio::io_context& io_context_;
@@ -46,4 +48,7 @@ private:
     CommandRegistry command_registry_;
     bool rsa_initialized_ = false;
     std::mutex rsa_mutex_;
+
+    // Tick system (20 ticks per second = 50ms per tick)
+    boost::asio::steady_timer tick_timer_;
 };

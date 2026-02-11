@@ -40,6 +40,9 @@ public:
     void set_nickname(const std::string& name);
     std::string get_nickname() const;
 
+    void set_protocol_version(int version);
+    int get_protocol_version() const;
+
     void set_waiting_for_encryption(bool waiting);
     bool is_waiting_for_encryption() const;
 
@@ -74,6 +77,7 @@ private:
     bool just_enabled_encryption = false;
     bool compression_enabled = false;
     bool waitingForResponse = false;
+    int protocol_version = 751;
     std::string nickname;
     std::vector<uint8_t> stream_buffer_;
     tcp::socket socket_;

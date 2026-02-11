@@ -15,8 +15,10 @@ void SpawnNamedEntityPacket::write(PacketBuffer& buffer) {
     buffer.writeByte(static_cast<int8_t>(player->getRotation().y * 256.0f / 360.0f));
 
     // Initial Entity Metadata
+    // В методе инициализации игрока или спавна:
     Metadata metadata;
-    metadata.addByte(16, player->getDisplayedSkinParts()); // Skin parts
+    metadata.addByte(16, 0x7F); // Включаем все слои (0x01 | 0x02 | 0x04 | 0x08 | 0x10 | 0x20 | 0x40)
+    // Отправить пакет SetEntityMetadata
 
     uint8_t statusFlags = 0;
     if (player->isSneaking()) statusFlags |= 0x02;

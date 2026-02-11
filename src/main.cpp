@@ -9,6 +9,7 @@ int main() {
 
         Server server(io_context);
         server.start_console();
+        server.start_tick_system();
 
         io_context.run();
     } catch (std::exception& e) {

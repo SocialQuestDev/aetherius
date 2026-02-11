@@ -11,7 +11,12 @@ void BlockPlacePacket::handle(Connection& connection) {
     auto player = connection.getPlayer();
     if (!player) return;
 
-    Slot heldItem = player->getInventory()[36 + player->getHeldItemSlot()];
+    const auto& inventory = player->getInventory();
+    int inventoryIndex = 36 + player->getHeldItemSlot();
+
+    if (inventoryIndex >= inventory.size()) return;
+
+    Slot heldItem = inventory[inventoryIndex];
     if (heldItem.itemId <= 0) return;
 
     const RegistryEntry* itemInfo = MinecraftRegistry::getByItemId(heldItem.itemId);

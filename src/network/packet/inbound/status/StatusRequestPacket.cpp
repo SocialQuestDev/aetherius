@@ -12,8 +12,8 @@ void StatusRequestPacket::handle(Connection& connection) {
     auto config = Server::get_instance().get_config();
     PlayerList& list = PlayerList::getInstance();
 
-    resp["version"]["name"] = "1.16.5";
-    resp["version"]["protocol"] = 754;
+    resp["version"]["name"] = "1.16.2 - 1.16.5";
+    resp["version"]["protocol"] = connection.get_protocol_version();
 
     resp["players"]["max"] = config["server"]["max_player"].value_or(20);
     resp["players"]["online"] = list.getPlayers().size();

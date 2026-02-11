@@ -11,7 +11,9 @@
 #include "console/Logger.h"
 #include <memory>
 
+#include "network/Metadata.h"
 #include "network/packet/outbound/play/EntityEquipmentPacket.h"
+#include "network/packet/outbound/play/EntityMetadataPacket.h"
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
     : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),
@@ -68,23 +70,37 @@ void Player::kill() {
     if (dead) return;
     dead = true;
 
-    LOG_DEBUG("Player " + nickname + " died. Broadcasting death animation.");
-
+    // 1. Отправляем самому игроку, что он мертв (экран смерти)
     UpdateHealthPacket healthPacket(0.0f, 0, 0.0f);
     connection->send_packet(healthPacket);
 
-    EntityStatusPacket damagePacket(id, static_cast<std::byte>(2));
-    EntityStatusPacket deathPacket(id, static_cast<std::byte>(3));
-    EntityStatusPacket deathAnimPacket(id, static_cast<std::byte>(60));
+    // Подготавливаем метадату
+    Metadata meta;
+    meta.addFloat(9, 0.0f); // Здоровье в 0 (Index 9 из скриншота Living Entity)
+    meta.addPose(6, 2);  // Опционально: поза смерти, если 0.0f не хватит
+
+    // Создаем пакет (код пакета SetEntityMetadata обычно 0x56 или 0x50)
+    EntityMetadataPacket metadataPacket(id, meta);
+
+    // 2. Рассылаем всем статус
+    EntityStatusPacket damagePacket(id, static_cast<std::byte>(2)); // Покраснение
+    EntityStatusPacket deathPacket(id, static_cast<std::byte>(3));  // Падение на бок
+
     for (const auto& other : PlayerList::getInstance().getPlayers()) {
+        // Не отправляем самому себе (опционально, зависит от версии)
+        other->getConnection()->send_packet(metadataPacket);
         other->getConnection()->send_packet(damagePacket);
         other->getConnection()->send_packet(deathPacket);
-        other->getConnection()->send_packet(deathAnimPacket);
     }
 
+    // 3. Сообщение в чат
     for (const auto& other : PlayerList::getInstance().getPlayers()) {
         other->sendChatMessage(nickname + " умер!");
     }
+
+    // ВАЖНО: Через ~1-2 секунды нужно отправить пакет Destroy Entities (код 0x3D или аналогичный)
+    // Иначе «труп» так и будет лежать или стоять в зависимости от версии клиента.
+
 }
 
 void Player::teleportToSpawn() {
@@ -104,21 +120,28 @@ void Player::teleportToSpawn() {
     PlayerPositionAndLookPacket posLookPacket(position.x, position.y, position.z, rotation.x, rotation.y, 0x00, id);
     connection->send_packet(posLookPacket);
 
-    if (!inventory.empty()) {
-        inventory.clear();
-        EntityEquipmentPacket equipPacket(id, 0, Slot());
-        for (const auto& p : PlayerList::getInstance().getPlayers()) {
-            p->connection->send_packet(equipPacket);
-        }
+    // Clear inventory and reinitialize to correct size (46 slots)
+    inventory.clear();
+    inventory.resize(46);
 
+    EntityEquipmentPacket equipPacket(id, 0, Slot());
+    for (const auto& p : PlayerList::getInstance().getPlayers()) {
+        p->connection->send_packet(equipPacket);
     }
 
     LOG_DEBUG("Player " + nickname + " teleported to spawn and healed");
 }
 
 void Player::disconnect() const {
+    // Проверяем, есть ли игрок в списке (избегаем повторного отключения)
+    if (!PlayerList::getInstance().getPlayer(getId())) {
+        return;
+    }
+
     for (const auto& client: PlayerList::getInstance().getPlayers()) {
-        client->sendChatMessage(nickname + " left the game", ChatColor::YELLOW);
+        if (client->getId() != getId()) {
+            client->sendChatMessage(nickname + " left the game", ChatColor::YELLOW);
+        }
     }
 
     DestroyEntitiesPacket destroyPacket({getId()});
@@ -129,7 +152,10 @@ void Player::disconnect() const {
     }
 
     PlayerList::getInstance().removePlayer(getId());
-    connection->socket().close();
+
+    boost::system::error_code ec;
+    connection->socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec);
+    connection->socket().close(ec);
 
     LOG_DEBUG("Player " + nickname + " disconnected");
 }

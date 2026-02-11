@@ -256,3 +256,20 @@ std::vector<uint8_t> World::getDimensionCodec() {
     nbt.endCompound(); // End Root
     return nbt.buffer;
 }
+
+void World::tick() {
+    worldAge++;
+    timeOfDay = (timeOfDay + 1) % 24000;
+}
+
+int64_t World::getWorldAge() const {
+    return worldAge;
+}
+
+int64_t World::getTimeOfDay() const {
+    return timeOfDay;
+}
+
+void World::setTimeOfDay(int64_t time) {
+    timeOfDay = time % 24000;
+}

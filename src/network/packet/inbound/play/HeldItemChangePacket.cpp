@@ -11,7 +11,15 @@ void HeldItemChangePacket::handle(Connection& connection) {
 
         // Broadcast the change to other players
         // The slot for the main hand is 0
-        EntityEquipmentPacket packet(player->getId(), 0, player->getInventory()[36 + player->getHeldItemSlot()]);
+        const auto& inventory = player->getInventory();
+        int inventoryIndex = 36 + player->getHeldItemSlot();
+
+        Slot heldItem;
+        if (inventoryIndex < inventory.size()) {
+            heldItem = inventory[inventoryIndex];
+        }
+
+        EntityEquipmentPacket packet(player->getId(), 0, heldItem);
         for (const auto& otherPlayer : PlayerList::getInstance().getPlayers()) {
             if (otherPlayer->getId() != player->getId()) {
                 otherPlayer->getConnection()->send_packet(packet);

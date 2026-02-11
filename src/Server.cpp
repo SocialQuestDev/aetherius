@@ -27,11 +27,13 @@
 #include "commands/gameCommands/PingCommand.h"
 #include "commands/gameCommands/KillCommand.h"
 #include "commands/gameCommands/HelpGameCommand.h"
+#include "commands/gameCommands/TimeCommand.h"
 #include "commands/consoleCommands/HelpCommand.h"
 
 Server* Server::instance;
 
-Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_context_(io_context) {
+Server::Server(boost::asio::io_context& io_context)
+    : acceptor_(io_context), io_context_(io_context), tick_timer_(io_context) {
     instance = this;
 
     LOG_INFO("Loading configuration...");
@@ -153,6 +155,7 @@ void Server::register_commands() {
     // Game Commands
     command_registry_.registerGameCommand(std::make_unique<PingCommand>());
     command_registry_.registerGameCommand(std::make_unique<KillCommand>());
+    command_registry_.registerGameCommand(std::make_unique<TimeCommand>());
     command_registry_.registerGameCommand(std::make_unique<HelpGameCommand>());
 }
 
@@ -191,4 +194,18 @@ void Server::handle_accept(const std::shared_ptr<Connection> &new_connection, co
         LOG_ERROR("Accept error: " + error.message());
     }
     start_accept();
+}
+
+void Server::start_tick_system() {
+    tick_timer_.expires_after(std::chrono::milliseconds(50)); // 20 ticks per second
+    tick_timer_.async_wait([this](const boost::system::error_code& ec) {
+        if (!ec) {
+            tick();
+            start_tick_system();
+        }
+    });
+}
+
+void Server::tick() {
+    world->tick();
 }
