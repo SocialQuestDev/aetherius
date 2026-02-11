@@ -412,32 +412,50 @@ void Connection::update_chunks() {
     vp.writeVarInt(chunkZ);
     send_packet(vp);
 
-    // Load new chunks around player
+    // Load new chunks around player asynchronously
     Server& server = Server::get_instance();
-    World& world = server.get_world();
+    auto& io_context = server.get_io_context();
+    auto conn_ptr = shared_from_this();
 
     int viewDistance = player->getViewDistance();
-    for (int x = -viewDistance; x <= viewDistance; ++x) {
-        for (int z = -viewDistance; z <= viewDistance; ++z) {
-            int cx = chunkX + x;
-            int cz = chunkZ + z;
+    int prev_chunk_x = last_chunk_x_;
+    int prev_chunk_z = last_chunk_z_;
 
-            // Check if this chunk was already loaded
-            bool wasLoaded = (std::abs(cx - last_chunk_x_) <= viewDistance &&
-                            std::abs(cz - last_chunk_z_) <= viewDistance &&
-                            last_chunk_x_ != 0 && last_chunk_z_ != 0);
-
-            if (!wasLoaded) {
-                ChunkColumn* chunk = world.generateChunk(cx, cz);
-                PacketBuffer cp;
-                cp.writeVarInt(0x20);
-                auto p = chunk->serialize();
-                cp.data.insert(cp.data.end(), p.begin(), p.end());
-                send_packet(cp);
-            }
-        }
-    }
-
+    // Update last known chunk position
     last_chunk_x_ = chunkX;
     last_chunk_z_ = chunkZ;
+
+    // Post chunk loading to io_context to avoid blocking
+    boost::asio::post(io_context, [conn_ptr, chunkX, chunkZ, viewDistance, prev_chunk_x, prev_chunk_z]() {
+        Server& server = Server::get_instance();
+        World& world = server.get_world();
+
+        for (int x = -viewDistance; x <= viewDistance; ++x) {
+            for (int z = -viewDistance; z <= viewDistance; ++z) {
+                int cx = chunkX + x;
+                int cz = chunkZ + z;
+
+                // Check if this chunk was already loaded
+                bool wasLoaded = (std::abs(cx - prev_chunk_x) <= viewDistance &&
+                                std::abs(cz - prev_chunk_z) <= viewDistance &&
+                                prev_chunk_x != 0 && prev_chunk_z != 0);
+
+                if (!wasLoaded) {
+                    ChunkColumn* chunk = world.generateChunk(cx, cz);
+                    if (!chunk) continue;
+
+                    // Serialize chunk data
+                    auto serialized_chunk = std::make_shared<std::vector<uint8_t>>(chunk->serialize());
+
+                    // Post packet sending to connection's write strand for thread safety
+                    boost::asio::post(conn_ptr->get_write_strand(), [conn_ptr, serialized_chunk]() {
+                        PacketBuffer cp;
+                        cp.writeVarInt(0x20);
+                        cp.data.insert(cp.data.end(), serialized_chunk->begin(), serialized_chunk->end());
+                        conn_ptr->send_packet(cp);
+                    });
+                }
+            }
+        }
+    });
 }

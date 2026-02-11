@@ -27,12 +27,16 @@ void TeleportConfirmPacket::handle(Connection& connection) {
 
     auto& io_context = Server::get_instance().get_io_context();
     auto conn_ptr = connection.shared_from_this();
+    int viewDistance = player->getViewDistance();
+
+    // Update last known chunk position for the connection
+    connection.last_chunk_x_ = chunkX;
+    connection.last_chunk_z_ = chunkZ;
 
     // Post a task to the io_context's thread pool to handle chunk loading and sending.
-    boost::asio::post(io_context, [conn_ptr, chunkX, chunkZ]() {
+    boost::asio::post(io_context, [conn_ptr, chunkX, chunkZ, viewDistance]() {
         Server& server = Server::get_instance();
         World& world = server.get_world();
-        int viewDistance = 2; // Example view distance
 
         for (int x = -viewDistance; x <= viewDistance; ++x) {
             for (int z = -viewDistance; z <= viewDistance; ++z) {
