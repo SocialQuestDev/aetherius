@@ -1,16 +1,15 @@
 #pragma once
-#include "../OutboundPacket.h"
-#include <vector>
 
-class Player; // Forward declaration
+#include "../OutboundPacket.h"
+#include "../../Metadata.h"
 
 class EntityMetadataPacket : public OutboundPacket {
 public:
-    EntityMetadataPacket(const Player& player);
+    EntityMetadataPacket(int entityId, const Metadata& metadata);
     int getPacketId() const override { return 0x44; }
     void write(PacketBuffer& buffer) override;
 
 private:
     int entityId;
-    uint8_t metadata;
+    const Metadata& metadata;
 };

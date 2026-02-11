@@ -1,9 +1,14 @@
 #include "../../../include/commands/gameCommands/PingCommand.h"
 #include "../../../include/network/packet/play/ChatMessagePacket.h"
+#include "../../../include/console/Logger.h"
+#include "../../../include/game/player/Player.h"
 
-void PingCommand::execute(Connection& connection, const std::vector<std::string>& args) {
-    ChatMessagePacket pingResponse("{\"text\":\"Pong!\"}", 0, UUID());
-    connection.send_packet(pingResponse);
+void PingCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
+    if (player) {
+        player->sendChatMessage("Pong!");
+    } else {
+        LOG_INFO("Pong!");
+    }
 }
 
 std::string PingCommand::getName() const {

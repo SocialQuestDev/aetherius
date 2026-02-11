@@ -1,10 +1,10 @@
 #pragma once
 
-#include "../Command.h"
+#include "../GameCommand.h"
 
-class PingCommand : public Command {
+class PingCommand : public GameCommand {
 public:
-    void execute(Connection& connection, const std::vector<std::string>& args) override;
+    void execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) override;
     std::string getName() const override;
     std::string getDescription() const override;
 };

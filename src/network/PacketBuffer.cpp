@@ -221,8 +221,12 @@ void PacketBuffer::readNbt() {
 void PacketBuffer::writeByte(uint8_t value) { data.push_back(value); }
 void PacketBuffer::writeBoolean(bool value) { writeByte(value ? 1 : 0); }
 
-void PacketBuffer::writeByteArray(std::vector<uint8_t>& value) {
+void PacketBuffer::writeByteArray(const std::vector<uint8_t>& value) {
     writeVarInt(value.size());
+    data.insert(data.end(), value.begin(), value.end());
+}
+
+void PacketBuffer::writeBytes(const std::vector<uint8_t>& value) {
     data.insert(data.end(), value.begin(), value.end());
 }
 

@@ -14,125 +14,51 @@
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
     : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),
       position(0.0, 7.0, 0.0), rotation(0.0f, 0.0f), health(20.0f), food(20), dead(false), onGround(false),
-      heldItemSlot(0), inventory(46), flying(false), viewDistance(8), sneaking(false), sprinting(false) {}
+      heldItemSlot(0), inventory(46), flying(false), viewDistance(8), sneaking(false), sprinting(false),
+      locale("en_US"), chatMode(ChatMode::ENABLED), chatColors(true), displayedSkinParts(0x7F), mainHand(MainHand::RIGHT) {}
 
-int Player::getId() const {
-    return id;
-}
+// Getters
+int Player::getId() const { return id; }
+UUID Player::getUuid() const { return uuid; }
+std::string Player::getNickname() const { return nickname; }
+std::string Player::getSkin() const { return skin; }
+std::shared_ptr<Connection> Player::getConnection() const { return connection; }
+Vector3 Player::getPosition() const { return position; }
+Vector2 Player::getRotation() const { return rotation; }
+float Player::getHealth() const { return health; }
+int Player::getFood() const { return food; }
+bool Player::isDead() const { return dead; }
+bool Player::isOnGround() const { return onGround; }
+short Player::getHeldItemSlot() const { return heldItemSlot; }
+const std::vector<Slot>& Player::getInventory() const { return inventory; }
+bool Player::isFlying() const { return flying; }
+uint8_t Player::getViewDistance() const { return viewDistance; }
+bool Player::isSneaking() const { return sneaking; }
+bool Player::isSprinting() const { return sprinting; }
+std::string Player::getLocale() const { return locale; }
+ChatMode Player::getChatMode() const { return chatMode; }
+bool Player::hasChatColors() const { return chatColors; }
+uint8_t Player::getDisplayedSkinParts() const { return displayedSkinParts; }
+MainHand Player::getMainHand() const { return mainHand; }
 
-UUID Player::getUuid() const {
-    return uuid;
-}
-
-std::string Player::getNickname() const {
-    return nickname;
-}
-
-std::string Player::getSkin() const {
-    return skin;
-}
-
-std::shared_ptr<Connection> Player::getConnection() const {
-    return connection;
-}
-
-Vector3 Player::getPosition() const {
-    return position;
-}
-
-Vector2 Player::getRotation() const {
-    return rotation;
-}
-
-float Player::getHealth() const {
-    return health;
-}
-
-int Player::getFood() const {
-    return food;
-}
-
-bool Player::isDead() const {
-    return dead;
-}
-
-bool Player::isOnGround() const {
-    return onGround;
-}
-
-short Player::getHeldItemSlot() const {
-    return heldItemSlot;
-}
-
-const std::vector<Slot>& Player::getInventory() const {
-    return inventory;
-}
-
-bool Player::isFlying() const {
-    return flying;
-}
-
-uint8_t Player::getViewDistance() const {
-    return viewDistance;
-}
-
-bool Player::isSneaking() const {
-    return sneaking;
-}
-
-bool Player::isSprinting() const {
-    return sprinting;
-}
-
-void Player::setPosition(const Vector3& position) {
-    this->position = position;
-}
-
-void Player::setRotation(const Vector2& rotation) {
-    this->rotation = rotation;
-}
-
-void Player::setHealth(float health) {
-    this->health = health;
-}
-
-void Player::setFood(int food) {
-    this->food = food;
-}
-
-void Player::setDead(bool dead) {
-    this->dead = dead;
-}
-
-void Player::setOnGround(bool onGround) {
-    this->onGround = onGround;
-}
-
-void Player::setHeldItemSlot(short slot) {
-    this->heldItemSlot = slot;
-}
-
-void Player::setInventorySlot(int slot, const Slot& item) {
-    if (slot >= 0 && slot < inventory.size()) {
-        inventory[slot] = item;
-    }
-}
-
-void Player::setFlying(bool flying) {
-    this->flying = flying;
-}
-
-void Player::setViewDistance(uint8_t viewDistance) {
-    this->viewDistance = viewDistance;
-}
-
-void Player::setSneaking(bool sneaking) {
-    this->sneaking = sneaking;
-}
-
-void Player::setSprinting(bool sprinting) {
-    this->sprinting = sprinting;
-}
+// Setters
+void Player::setPosition(const Vector3& position) { this->position = position; }
+void Player::setRotation(const Vector2& rotation) { this->rotation = rotation; }
+void Player::setHealth(float health) { this->health = health; }
+void Player::setFood(int food) { this->food = food; }
+void Player::setDead(bool dead) { this->dead = dead; }
+void Player::setOnGround(bool onGround) { this->onGround = onGround; }
+void Player::setHeldItemSlot(short slot) { this->heldItemSlot = slot; }
+void Player::setInventorySlot(int slot, const Slot& item) { if (slot >= 0 && slot < inventory.size()) { inventory[slot] = item; } }
+void Player::setFlying(bool flying) { this->flying = flying; }
+void Player::setViewDistance(uint8_t viewDistance) { this->viewDistance = viewDistance; }
+void Player::setSneaking(bool sneaking) { this->sneaking = sneaking; }
+void Player::setSprinting(bool sprinting) { this->sprinting = sprinting; }
+void Player::setLocale(const std::string& locale) { this->locale = locale; }
+void Player::setChatMode(ChatMode chatMode) { this->chatMode = chatMode; }
+void Player::setChatColors(bool chatColors) { this->chatColors = chatColors; }
+void Player::setDisplayedSkinParts(uint8_t displayedSkinParts) { this->displayedSkinParts = displayedSkinParts; }
+void Player::setMainHand(MainHand mainHand) { this->mainHand = mainHand; }
 
 void Player::kill() {
     if (dead) return;
@@ -152,11 +78,8 @@ void Player::kill() {
         other->getConnection()->send_packet(deathAnimPacket);
     }
 
-    std::string deathMsg = "{\"text\":\"" + nickname + " умер!\"}";
-    ChatMessagePacket chatPacket(deathMsg, 1, uuid);
-
     for (const auto& other : PlayerList::getInstance().getPlayers()) {
-        other->getConnection()->send_packet(chatPacket);
+        other->sendChatMessage(nickname + " умер!");
     }
 }
 
@@ -180,10 +103,9 @@ void Player::teleportToSpawn() {
     LOG_DEBUG("Player " + nickname + " teleported to spawn and healed");
 }
 
-void Player::disconnect() {
+void Player::disconnect() const {
     for (const auto& client: PlayerList::getInstance().getPlayers()) {
-        ChatMessagePacket packet(R"({"text":")" + nickname + R"( left the game", "color":"yellow"})", 1, uuid);
-        client.get()->getConnection()->send_packet(packet);
+        client->sendChatMessage(nickname + " left the game", ChatColor::YELLOW);
     }
 
     DestroyEntitiesPacket destroyPacket({getId()});
@@ -197,4 +119,9 @@ void Player::disconnect() {
     connection->socket().close();
 
     LOG_DEBUG("Player " + nickname + " disconnected");
+}
+
+void Player::sendChatMessage(const std::string &message, const ChatColor color, const UUID senderUuid) const {
+    ChatMessagePacket message_packet = ChatMessagePacket("{\"text\":\"" + message + "\", \"color\":\"" + to_string(color) + "\"}", 1, senderUuid);
+    connection->send_packet(message_packet);
 }

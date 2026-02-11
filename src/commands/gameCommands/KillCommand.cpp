@@ -1,8 +1,39 @@
 #include "../../../include/commands/gameCommands/KillCommand.h"
+#include "../../../include/network/packet/play/ChatMessagePacket.h"
 #include "../../../include/game/player/Player.h"
+#include "../../../include/game/player/PlayerList.h"
+#include "../../../include/console/Logger.h"
+#include "../../../include/other/ChatColor.h"
 
-void KillCommand::execute(Connection& connection, const std::vector<std::string>& args) {
-    connection.getPlayer()->kill();
+void KillCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
+    if (player) {
+        if (!args.empty()) {
+            std::string target_name = args[0];
+            auto target = PlayerList::getInstance().getPlayer(target_name);
+            if (!target) {
+                LOG_INFO("Player not found: " + target_name);
+                return;
+            }
+            target->kill();
+        }
+        else {
+            player->sendChatMessage("Usage: /kill <player>");
+        }
+    }
+    else {
+        if (args.empty()) {
+            std::string target_name = args[0];
+            auto target = PlayerList::getInstance().getPlayer(target_name);
+            if (!target) {
+                LOG_INFO("Player not found: " + target_name);
+                return;
+            }
+            target->kill();
+        }
+        else {
+            LOG_INFO("Usage: /kill <player>");
+        }
+    }
 }
 
 std::string KillCommand::getName() const {
@@ -10,5 +41,5 @@ std::string KillCommand::getName() const {
 }
 
 std::string KillCommand::getDescription() const {
-    return "Kills the player.";
+    return "Kills a player.";
 }

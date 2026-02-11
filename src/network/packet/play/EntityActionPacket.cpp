@@ -4,6 +4,7 @@
 #include "../../../../include/network/packet/play/EntityMetadataPacket.h"
 #include "../../../../include/game/player/PlayerList.h"
 #include "../../../../include/console/Logger.h"
+#include "../../../../include/network/Metadata.h"
 
 void EntityActionPacket::handle(Connection& connection) {
     auto player = connection.getPlayer();
@@ -31,15 +32,21 @@ void EntityActionPacket::handle(Connection& connection) {
     }
 
     if (metadataChanged) {
-        EntityMetadataPacket metadataPacket(*player);
+        Metadata metadata;
+        uint8_t statusFlags = 0;
+        if (player->isSneaking()) statusFlags |= 0x02;
+        if (player->isSprinting()) statusFlags |= 0x08;
+
+        metadata.addByte(0, statusFlags); // Index 0: Status flags
+        metadata.addPose(6, player->isSneaking() ? 5 : 0); // Index 6: Pose
+
+        EntityMetadataPacket metadataPacket(player->getId(), metadata);
         for (const auto& other : PlayerList::getInstance().getPlayers()) {
             if (other->getId() != player->getId()) {
                 other->getConnection()->send_packet(metadataPacket);
             }
         }
     }
-
-    LOG_DEBUG("Action received: " + std::to_string(actionId));
 }
 
 void EntityActionPacket::read(PacketBuffer& buffer) {

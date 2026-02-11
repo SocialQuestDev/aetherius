@@ -72,8 +72,7 @@ void EncryptionResponsePacket::handle(Connection& connection) {
     connection.start_keep_alive_timer();
 
     for (const auto& client: PlayerList::getInstance().getPlayers()) {
-        ChatMessagePacket packet(R"({"text":")" + nickname + R"( joined the game", "color":"yellow"})", 1, uuid);
-        client.get()->getConnection()->send_packet(packet);
+        client->sendChatMessage(nickname + " joined the game", ChatColor::YELLOW);
     }
 
     LOG_INFO("Online player logged in: " + nickname + " [" + uuid_to_string(uuid.high, uuid.low) + "]");

@@ -1,10 +1,8 @@
 #include "../../include/commands/GameCommand.h"
 #include "../../include/network/packet/play/ChatMessagePacket.h"
 
-void GameCommand::execute(Connection& connection, const std::vector<std::string>& args) {
-    // Placeholder
-    ChatMessagePacket response("{\"text\":\"Chat command placeholder.\"}", 0, UUID());
-    connection.send_packet(response);
+void GameCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
+    player->sendChatMessage("Chat command placeholder.");
 }
 
 std::string GameCommand::getName() const {

@@ -8,7 +8,7 @@
 class Command {
 public:
     virtual ~Command() = default;
-    virtual void execute(Connection& connection, const std::vector<std::string>& args) = 0;
+    virtual void execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) = 0;
     virtual std::string getName() const = 0;
     virtual std::string getDescription() const = 0;
 };

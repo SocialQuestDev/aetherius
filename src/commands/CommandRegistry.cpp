@@ -2,22 +2,28 @@
 #include "../../include/network/packet/play/ChatMessagePacket.h"
 #include "../../include/utility/String.h"
 #include "../../include/console/Logger.h"
-#include "../../include/network/Connection.h"
+#include "../../include/game/player/Player.h"
 
-void CommandRegistry::registerGameCommand(std::unique_ptr<Command> command) {
+void CommandRegistry::registerGameCommand(std::unique_ptr<GameCommand> command) {
     gameCommands[command->getName()] = std::move(command);
 }
 
-void CommandRegistry::registerConsoleCommand(std::unique_ptr<Command> command) {
+void CommandRegistry::registerConsoleCommand(std::unique_ptr<ConsoleCommand> command) {
     consoleCommands[command->getName()] = std::move(command);
 }
 
-void CommandRegistry::executeCommand(Connection* connection, const std::string& message) {
-    std::vector<std::string> parts = String::split(message.substr(1), ' ');
+void CommandRegistry::executeCommand(std::shared_ptr<Player> player, const std::string& message) {
+    bool isGameCommand = player || (!message.empty() && message[0] == '/');
+    std::string command_text = message;
+    if (isGameCommand && !message.empty() && message[0] == '/') {
+        command_text = message.substr(1);
+    }
+
+    std::vector<std::string> parts = String::split(command_text, ' ');
     if (parts.empty()) return;
 
     std::unordered_map<std::string, std::unique_ptr<Command>>* commands;
-    if (connection) {
+    if (isGameCommand) {
         commands = &gameCommands;
     } else {
         commands = &consoleCommands;
@@ -26,11 +32,10 @@ void CommandRegistry::executeCommand(Connection* connection, const std::string& 
     auto it = commands->find(parts[0]);
     if (it != commands->end()) {
         std::vector<std::string> args(parts.begin() + 1, parts.end());
-        it->second->execute(*connection, args);
+        it->second->execute(player, args);
     } else {
-        if (connection) {
-            ChatMessagePacket unknownCommand("{\"text\":\"Unknown command: " + message + "\"}", 0, UUID());
-            connection->send_packet(unknownCommand);
+        if (player && player->getConnection()) {
+            player->sendChatMessage("Unknown command: " + message);
         } else {
             LOG_INFO("Unknown command: " + message);
         }
@@ -39,4 +44,8 @@ void CommandRegistry::executeCommand(Connection* connection, const std::string& 
 
 const std::unordered_map<std::string, std::unique_ptr<Command>>& CommandRegistry::get_game_commands() const {
     return gameCommands;
+}
+
+const std::unordered_map<std::string, std::unique_ptr<Command>>& CommandRegistry::get_console_commands() const {
+    return consoleCommands;
 }

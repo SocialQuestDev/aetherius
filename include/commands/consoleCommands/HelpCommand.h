@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../GameCommand.h"
+#include "../ConsoleCommand.h"
 
-class KillCommand : public GameCommand {
+class HelpCommand : public ConsoleCommand {
 public:
     void execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) override;
     std::string getName() const override;

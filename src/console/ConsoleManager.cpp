@@ -26,9 +26,6 @@ void ConsoleManager::handle_read(const boost::system::error_code& error, std::si
             if (line.back() == '\r') {
                 line.pop_back();
             }
-            if (line[0] != '/') {
-                line = "/" + line;
-            }
             Server::get_instance().get_command_registry().executeCommand(nullptr, line);
         }
 

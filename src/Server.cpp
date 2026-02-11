@@ -26,7 +26,8 @@
 #include "../include/network/packet/play/ClientSettingsPacket.h"
 #include "../include/commands/gameCommands/PingCommand.h"
 #include "../include/commands/gameCommands/KillCommand.h"
-
+#include "../include/commands/gameCommands/HelpGameCommand.h"
+#include "../include/commands/consoleCommands/HelpCommand.h"
 
 Server* Server::instance;
 
@@ -48,7 +49,7 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
         LOG_WARN("While this makes the game possible to play without internet access, it also opens up the ability for hackers to connect with any username they choose.");
         LOG_WARN("To change this, set 'online-mode' to 'true' in the config.toml file.");
     }
-    // ФИКС: Принудительно используем IPv4, чтобы избежать таймаутов на Windows/Linux
+
     boost::system::error_code ec;
     auto address = boost::asio::ip::make_address(ip, ec);
 
@@ -57,7 +58,6 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
         address = boost::asio::ip::make_address("0.0.0.0");
     }
 
-    // Создаем endpoint (точку подключения)
     const tcp::endpoint endpoint(address, port);
 
     acceptor_.open(endpoint.protocol());
@@ -148,12 +148,16 @@ void Server::register_packets() {
 }
 
 void Server::register_commands() {
+    // Console Commands
+    command_registry_.registerConsoleCommand(std::make_unique<HelpCommand>());
+
+    // Game Commands
     command_registry_.registerGameCommand(std::make_unique<PingCommand>());
     command_registry_.registerGameCommand(std::make_unique<KillCommand>());
+    command_registry_.registerGameCommand(std::make_unique<HelpGameCommand>());
 }
 
 void Server::start_accept() {
-    // Создаем "пустое" соединение, которое будет ждать клиента
     std::shared_ptr<Connection> new_connection = Connection::create(io_context_);
 
     acceptor_.async_accept(new_connection->socket(),
@@ -170,18 +174,11 @@ void Server::handle_accept(const std::shared_ptr<Connection> &new_connection, co
         } catch(...) {}
 
         LOG_INFO("New connection from: " + client_ip);
-
-        // === ГЛАВНЫЙ ФИКС ЛАГОВ ===
-        // Отключаем алгоритм Нагла. Без этого MOTD тормозит.
         boost::system::error_code ec;
         new_connection->socket().set_option(boost::asio::ip::tcp::no_delay(true), ec);
-        
-        // Запускаем чтение в Connection
         new_connection->start();
     } else {
         LOG_ERROR("Accept error: " + error.message());
     }
-
-    // Сразу готовимся принимать следующего, не дожидаясь обработки текущего
     start_accept();
 }

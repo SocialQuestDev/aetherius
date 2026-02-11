@@ -33,6 +33,7 @@ private:
 
     tcp::acceptor acceptor_;
     boost::asio::io_context& io_context_;
+    std::unique_ptr<ConsoleManager> console_manager_;
     toml::table config;
     static Server* instance;
     RSA* cur_rsa;
@@ -40,5 +41,4 @@ private:
     std::unique_ptr<World> world;
     PacketRegistry packet_registry_;
     CommandRegistry command_registry_;
-    std::unique_ptr<ConsoleManager> console_manager_;
 };

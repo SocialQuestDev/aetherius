@@ -7,6 +7,7 @@
 #include "../../auth/UUID.h"
 #include "../../other/Vector3.h"
 #include "../../other/Vector2.h"
+#include "../../other/ChatColor.h"
 
 class Connection; // Forward declaration
 class Packet;     // Forward declaration
@@ -15,6 +16,17 @@ class Packet;     // Forward declaration
 struct Slot {
     int itemId = 0;
     int count = 0;
+};
+
+enum class ChatMode {
+    ENABLED,
+    COMMANDS_ONLY,
+    HIDDEN
+};
+
+enum class MainHand {
+    LEFT,
+    RIGHT
 };
 
 class Player {
@@ -39,6 +51,11 @@ public:
     uint8_t getViewDistance() const;
     bool isSneaking() const;
     bool isSprinting() const;
+    std::string getLocale() const;
+    ChatMode getChatMode() const;
+    bool hasChatColors() const;
+    uint8_t getDisplayedSkinParts() const;
+    MainHand getMainHand() const;
 
     // Setters
     void setPosition(const Vector3& position);
@@ -53,12 +70,17 @@ public:
     void setViewDistance(uint8_t viewDistance);
     void setSneaking(bool sneaking);
     void setSprinting(bool sprinting);
-
+    void setLocale(const std::string& locale);
+    void setChatMode(ChatMode chatMode);
+    void setChatColors(bool chatColors);
+    void setDisplayedSkinParts(uint8_t displayedSkinParts);
+    void setMainHand(MainHand mainHand);
 
     // Actions
     void kill();
     void teleportToSpawn();
-    void disconnect();
+    void disconnect() const;
+    void sendChatMessage(const std::string &message, ChatColor color = ChatColor::WHITE, UUID senderUuid = UUID()) const;
 private:
     int id;
     UUID uuid;
@@ -79,4 +101,9 @@ private:
     uint8_t viewDistance;
     bool sneaking;
     bool sprinting;
+    std::string locale;
+    ChatMode chatMode;
+    bool chatColors;
+    uint8_t displayedSkinParts;
+    MainHand mainHand;
 };

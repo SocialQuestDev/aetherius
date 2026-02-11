@@ -1,10 +1,8 @@
 #include "../../include/commands/ConsoleCommand.h"
 #include "../../include/network/packet/play/ChatMessagePacket.h"
 
-void ConsoleCommand::execute(Connection& connection, const std::vector<std::string>& args) {
-    // Placeholder
-    ChatMessagePacket response("{\"text\":\"Console command placeholder.\"}", 0, UUID());
-    connection.send_packet(response);
+void ConsoleCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
+    player->sendChatMessage("Console command placeholder.");
 }
 
 std::string ConsoleCommand::getName() const {

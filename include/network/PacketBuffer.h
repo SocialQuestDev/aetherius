@@ -37,7 +37,8 @@ public:
     // Write methods
     void writeByte(uint8_t value);
     void writeBoolean(bool value);
-    void writeByteArray(std::vector<uint8_t>& value);
+    void writeByteArray(const std::vector<uint8_t>& value);
+    void writeBytes(const std::vector<uint8_t>& value);
     void writeVarInt(int value);
     void writeString(const std::string& str);
     void writeShort(int16_t value);
