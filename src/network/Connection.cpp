@@ -22,6 +22,7 @@
 #include <zlib.h>
 #include <fstream>
 #include <chrono>
+#include <cmath>
 
 using json = nlohmann::json;
 
@@ -383,3 +384,52 @@ void Connection::do_write() {
 }
 
 void Connection::send_light_data(int chunkX, int chunkZ) {}
+
+void Connection::update_chunks() {
+    if (!player) return;
+
+    Vector3 pos = player->getPosition();
+    int chunkX = static_cast<int>(std::floor(pos.x / 16.0));
+    int chunkZ = static_cast<int>(std::floor(pos.z / 16.0));
+
+    // Check if player moved to a different chunk
+    if (chunkX == last_chunk_x_ && chunkZ == last_chunk_z_) {
+        return;
+    }
+
+    // Update ViewPosition packet
+    PacketBuffer vp;
+    vp.writeVarInt(0x40);
+    vp.writeVarInt(chunkX);
+    vp.writeVarInt(chunkZ);
+    send_packet(vp);
+
+    // Load new chunks around player
+    Server& server = Server::get_instance();
+    World& world = server.get_world();
+
+    int viewDistance = player->getViewDistance();
+    for (int x = -viewDistance; x <= viewDistance; ++x) {
+        for (int z = -viewDistance; z <= viewDistance; ++z) {
+            int cx = chunkX + x;
+            int cz = chunkZ + z;
+
+            // Check if this chunk was already loaded
+            bool wasLoaded = (std::abs(cx - last_chunk_x_) <= viewDistance &&
+                            std::abs(cz - last_chunk_z_) <= viewDistance &&
+                            last_chunk_x_ != 0 && last_chunk_z_ != 0);
+
+            if (!wasLoaded) {
+                ChunkColumn* chunk = world.generateChunk(cx, cz);
+                PacketBuffer cp;
+                cp.writeVarInt(0x20);
+                auto p = chunk->serialize();
+                cp.data.insert(cp.data.end(), p.begin(), p.end());
+                send_packet(cp);
+            }
+        }
+    }
+
+    last_chunk_x_ = chunkX;
+    last_chunk_z_ = chunkZ;
+}

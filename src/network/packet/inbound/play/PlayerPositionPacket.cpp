@@ -25,6 +25,9 @@ void PlayerPositionPacket::handle(Connection& connection) {
             player->kill();
         }
 
+        // Update chunks if player moved to a new chunk
+        connection.update_chunks();
+
         EntityTeleportPacket packet(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
         EntityHeadLookPacket headLook(player->getId(), player->getRotation().x);
         for (const auto& other : PlayerList::getInstance().getPlayers()) {
@@ -55,6 +58,9 @@ void PlayerPositionAndRotationPacket::handle(Connection& connection) {
         if (!player->isDead() && y < -10.0) {
             player->kill();
         }
+
+        // Update chunks if player moved to a new chunk
+        connection.update_chunks();
 
         EntityTeleportPacket teleport(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
         EntityHeadLookPacket headLook(player->getId(), player->getRotation().x);

@@ -56,9 +56,12 @@ public:
     void send_join_game();
     void start_keep_alive_timer();
     int getPing() const;
+    void update_chunks();
 
     std::chrono::steady_clock::time_point last_keep_alive_sent_;
     int ping_ms_ = 0;
+    int last_chunk_x_ = 0;
+    int last_chunk_z_ = 0;
 
 private:
     explicit Connection(boost::asio::io_context& io_context);
