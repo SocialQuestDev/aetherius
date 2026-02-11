@@ -38,23 +38,55 @@ void TeleportConfirmPacket::handle(Connection& connection) {
         Server& server = Server::get_instance();
         World& world = server.get_world();
 
+        // Collect chunks that need to be generated
+        std::vector<std::pair<int, int>> chunks_to_load;
+
         for (int x = -viewDistance; x <= viewDistance; ++x) {
             for (int z = -viewDistance; z <= viewDistance; ++z) {
-                // Generate or load the chunk. This is the heavy part.
-                ChunkColumn* chunk = world.generateChunk(chunkX + x, chunkZ + z);
-                if (!chunk) continue;
+                int cx = chunkX + x;
+                int cz = chunkZ + z;
 
-                // Serialize the chunk data. This can also be heavy.
-                // Use a shared_ptr to manage the lifetime of the serialized data across async calls.
-                auto serialized_chunk = std::make_shared<std::vector<uint8_t>>(chunk->serialize());
+                // Check if chunk already exists
+                ChunkColumn* existing = world.getChunk(cx, cz);
+                if (existing) {
+                    // Chunk already exists, just serialize and send
+                    auto serialized_chunk = std::make_shared<std::vector<uint8_t>>(existing->serialize());
+                    boost::asio::post(conn_ptr->get_write_strand(), [conn_ptr, serialized_chunk]() {
+                        PacketBuffer cp;
+                        cp.writeVarInt(0x20);
+                        cp.data.insert(cp.data.end(), serialized_chunk->begin(), serialized_chunk->end());
+                        conn_ptr->send_packet(cp);
+                    });
+                } else {
+                    // Need to generate this chunk
+                    chunks_to_load.push_back({cx, cz});
+                }
+            }
+        }
 
-                // Post the packet sending to the connection's write strand to ensure thread safety.
-                boost::asio::post(conn_ptr->get_write_strand(), [conn_ptr, serialized_chunk]() {
-                    PacketBuffer cp;
-                    cp.writeVarInt(0x20); // Packet ID for Chunk Data
-                    cp.data.insert(cp.data.end(), serialized_chunk->begin(), serialized_chunk->end());
-                    conn_ptr->send_packet(cp);
-                });
+        // Generate all new chunks in parallel
+        std::vector<std::future<ChunkColumn*>> futures;
+        futures.reserve(chunks_to_load.size());
+
+        for (const auto& [cx, cz] : chunks_to_load) {
+            futures.push_back(world.generateChunkAsync(cx, cz));
+        }
+
+        // Wait for chunks to be generated and send them
+        for (auto& future : futures) {
+            try {
+                ChunkColumn* chunk = future.get();
+                if (chunk) {
+                    auto serialized_chunk = std::make_shared<std::vector<uint8_t>>(chunk->serialize());
+                    boost::asio::post(conn_ptr->get_write_strand(), [conn_ptr, serialized_chunk]() {
+                        PacketBuffer cp;
+                        cp.writeVarInt(0x20);
+                        cp.data.insert(cp.data.end(), serialized_chunk->begin(), serialized_chunk->end());
+                        conn_ptr->send_packet(cp);
+                    });
+                }
+            } catch (const std::exception& e) {
+                // Log error but continue with other chunks
             }
         }
     });
