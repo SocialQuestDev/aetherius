@@ -102,6 +102,10 @@ void Connection::enable_encryption(const std::vector<uint8_t>& shared_secret) {
     encrypt = true;
 }
 
+boost::asio::io_context::strand& Connection::get_write_strand() {
+    return write_strand_;
+}
+
 void Connection::do_read() {
     auto self(shared_from_this());
 

@@ -107,6 +107,10 @@ PacketRegistry& Server::get_packet_registry() {
     return packet_registry_;
 }
 
+boost::asio::io_context& Server::get_io_context() {
+    return io_context_;
+}
+
 std::vector<uint8_t>& Server::get_public_key() const {
     std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(rsa_mutex_));
     if (!rsa_initialized_)

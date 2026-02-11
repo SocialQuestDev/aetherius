@@ -58,6 +58,8 @@ public:
     int getPing() const;
     void update_chunks();
 
+    boost::asio::io_context::strand& get_write_strand();
+
     std::chrono::steady_clock::time_point last_keep_alive_sent_;
     int ping_ms_ = 0;
     int last_chunk_x_ = 0;

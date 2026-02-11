@@ -24,6 +24,7 @@ public:
     World& get_world();
     PacketRegistry& get_packet_registry();
     CommandRegistry& get_command_registry();
+    boost::asio::io_context& get_io_context();
     void start_console();
     void async_init();
     void start_tick_system();
