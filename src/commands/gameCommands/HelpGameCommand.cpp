@@ -1,8 +1,8 @@
-#include "../../../include/commands/gameCommands/HelpGameCommand.h"
-#include "../../../include/Server.h"
-#include "../../../include/game/player/Player.h"
-#include "../../../include/other/ChatColor.h"
-#include "../../../include/console/Logger.h"
+#include "commands/gameCommands/HelpGameCommand.h"
+#include "Server.h"
+#include "game/player/Player.h"
+#include "other/ChatColor.h"
+#include "console/Logger.h"
 
 void HelpGameCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
     if (player) {

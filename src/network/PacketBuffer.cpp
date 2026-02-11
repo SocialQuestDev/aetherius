@@ -1,12 +1,12 @@
-#include "../../include/network/PacketBuffer.h"
-#include "../../include/crypto/AES.h"
-#include "../../include/console/Logger.h"
-#include "../../include/other/deflate.h"
+#include "network/PacketBuffer.h"
+#include "crypto/AES.h"
+#include "console/Logger.h"
+#include "other/deflate.h"
 #include <cstdint>
 #include <cstring>
 #include <vector>
 
-#include "../../include/other/Vector3.h"
+#include "other/Vector3.h"
 
 // read methods...
 uint8_t PacketBuffer::readByte() {

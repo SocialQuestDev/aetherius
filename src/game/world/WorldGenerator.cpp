@@ -1,4 +1,4 @@
-#include "../../../include/game/world/WorldGenerator.h"
+#include "game/world/WorldGenerator.h"
 
 void FlatWorldGenerator::generateChunk(ChunkColumn& chunkColumn) {
     for (int x = 0; x < 16; ++x) {

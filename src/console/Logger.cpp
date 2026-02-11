@@ -7,7 +7,7 @@
 #include <windows.h>
 #endif
 
-#include "../../include/console/Logger.h"
+#include "console/Logger.h"
 
 std::vector<LogEntry> Logger::s_History;
 std::mutex Logger::s_Mutex;

@@ -7,10 +7,11 @@ set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
 
-find_package(Boost 1.71 REQUIRED)
+find_package(Boost 1.71 REQUIRED CONFIG)
 
 if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
+    include_directories(${CMAKE_SOURCE_DIR}/include)
 
     file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS
             "src/*.cpp"

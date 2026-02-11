@@ -1,5 +1,5 @@
-#include "../../include/commands/GameCommand.h"
-#include "../../include/network/packet/play/ChatMessagePacket.h"
+#include "commands/GameCommand.h"
+#include "network/packet/outbound/play/ChatMessagePacket.h"
 
 void GameCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
     player->sendChatMessage("Chat command placeholder.");

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <boost/asio.hpp>
-#include "../include/Server.h"
-#include "../include/console/Logger.h"
+#include "Server.h"
+#include "console/Logger.h"
 
 int main() {
     try {

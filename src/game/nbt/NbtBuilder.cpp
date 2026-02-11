@@ -1,4 +1,4 @@
-#include "../../../include/game/nbt/NbtBuilder.h"
+#include "game/nbt/NbtBuilder.h"
 
 #include <cstring>
 #include <stdexcept>

@@ -1,6 +1,6 @@
 #include <fstream>
 #include <sstream>
-#include "../../include/utility/ConfigValidator.h"
+#include "utility/ConfigValidator.h"
 
 std::string ConfigValidator::table_to_string(const toml::table& tbl) {
     std::stringstream ss;

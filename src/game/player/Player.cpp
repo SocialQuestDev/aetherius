@@ -1,15 +1,17 @@
-#include "../../../include/game/player/Player.h"
-#include "../../../include/game/player/PlayerList.h"
-#include "../../../include/network/Connection.h"
-#include "../../../include/network/packet/play/UpdateHealthPacket.h"
-#include "../../../include/network/packet/play/PlayerPositionAndLookPacket.h"
-#include "../../../include/network/packet/play/EntityStatusPacket.h"
-#include "../../../include/network/packet/play/ChatMessagePacket.h"
-#include "../../../include/network/packet/play/PlayerInfoPacket.h"
-#include "../../../include/network/packet/play/DestroyEntitiesPacket.h"
-#include "../../../include/auth/MojangAuthHelper.h"
-#include "../../../include/console/Logger.h"
+#include "game/player/Player.h"
+#include "game/player/PlayerList.h"
+#include "network/Connection.h"
+#include "network/packet/outbound/play/UpdateHealthPacket.h"
+#include "network/packet/outbound/play/PlayerPositionAndLookPacket.h"
+#include "network/packet/outbound/play/EntityStatusPacket.h"
+#include "network/packet/outbound/play/ChatMessagePacket.h"
+#include "network/packet/outbound/play/PlayerInfoPacket.h"
+#include "network/packet/outbound/play/DestroyEntitiesPacket.h"
+#include "auth/MojangAuthHelper.h"
+#include "console/Logger.h"
 #include <memory>
+
+#include "network/packet/outbound/play/EntityEquipmentPacket.h"
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
     : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),
@@ -30,6 +32,7 @@ int Player::getFood() const { return food; }
 bool Player::isDead() const { return dead; }
 bool Player::isOnGround() const { return onGround; }
 short Player::getHeldItemSlot() const { return heldItemSlot; }
+Gamemode Player::getGamemode() const {return gamemode; }
 const std::vector<Slot>& Player::getInventory() const { return inventory; }
 bool Player::isFlying() const { return flying; }
 uint8_t Player::getViewDistance() const { return viewDistance; }
@@ -59,6 +62,7 @@ void Player::setChatMode(ChatMode chatMode) { this->chatMode = chatMode; }
 void Player::setChatColors(bool chatColors) { this->chatColors = chatColors; }
 void Player::setDisplayedSkinParts(uint8_t displayedSkinParts) { this->displayedSkinParts = displayedSkinParts; }
 void Player::setMainHand(MainHand mainHand) { this->mainHand = mainHand; }
+void Player::setGamemode(Gamemode gamemode) { this->gamemode = gamemode; }
 
 void Player::kill() {
     if (dead) return;
@@ -99,6 +103,15 @@ void Player::teleportToSpawn() {
 
     PlayerPositionAndLookPacket posLookPacket(position.x, position.y, position.z, rotation.x, rotation.y, 0x00, id);
     connection->send_packet(posLookPacket);
+
+    if (!inventory.empty()) {
+        inventory.clear();
+        EntityEquipmentPacket equipPacket(id, 0, Slot());
+        for (const auto& p : PlayerList::getInstance().getPlayers()) {
+            p->connection->send_packet(equipPacket);
+        }
+
+    }
 
     LOG_DEBUG("Player " + nickname + " teleported to spawn and healed");
 }

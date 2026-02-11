@@ -3,7 +3,7 @@
 #include <map>
 #include <functional>
 #include <memory>
-#include "Connection.h"
+#include "network/Connection.h"
 #include "packet/InboundPacket.h"
 
 using InboundPacketCreator = std::function<std::unique_ptr<InboundPacket>()>;

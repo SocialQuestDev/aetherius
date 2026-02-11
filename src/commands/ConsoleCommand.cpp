@@ -1,5 +1,5 @@
-#include "../../include/commands/ConsoleCommand.h"
-#include "../../include/network/packet/play/ChatMessagePacket.h"
+#include "commands/ConsoleCommand.h"
+#include "network/packet/outbound/play/ChatMessagePacket.h"
 
 void ConsoleCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
     player->sendChatMessage("Console command placeholder.");

@@ -1,9 +1,9 @@
-#include "../../../include/commands/gameCommands/KillCommand.h"
-#include "../../../include/network/packet/play/ChatMessagePacket.h"
-#include "../../../include/game/player/Player.h"
-#include "../../../include/game/player/PlayerList.h"
-#include "../../../include/console/Logger.h"
-#include "../../../include/other/ChatColor.h"
+#include "commands/gameCommands/KillCommand.h"
+#include "network/packet/outbound/play/ChatMessagePacket.h"
+#include "game/player/Player.h"
+#include "game/player/PlayerList.h"
+#include "console/Logger.h"
+#include "other/ChatColor.h"
 
 void KillCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
     if (player) {

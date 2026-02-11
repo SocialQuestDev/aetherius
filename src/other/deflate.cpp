@@ -1,4 +1,4 @@
-#include "../../include/other/deflate.h"
+#include "other/deflate.h"
 
 std::vector<uint8_t> compressData(const std::vector<uint8_t>& data) {
     z_stream zs = {};

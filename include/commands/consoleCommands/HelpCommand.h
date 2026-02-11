@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../ConsoleCommand.h"
+#include "commands/ConsoleCommand.h"
 
 class HelpCommand : public ConsoleCommand {
 public:

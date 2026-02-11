@@ -1,5 +1,5 @@
-#include "../../include/console/ConsoleManager.h"
-#include "../../include/Server.h"
+#include "console/ConsoleManager.h"
+#include "Server.h"
 #include <iostream>
 
 ConsoleManager::ConsoleManager(boost::asio::io_context& io_context)

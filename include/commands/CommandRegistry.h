@@ -3,9 +3,9 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
-#include "Command.h"
-#include "ConsoleCommand.h"
-#include "GameCommand.h"
+#include "commands/Command.h"
+#include "commands/ConsoleCommand.h"
+#include "commands/GameCommand.h"
 
 class Connection;
 class Player;

@@ -1,13 +1,14 @@
 #pragma once
 
-#include "PacketBuffer.h"
+#include "network/PacketBuffer.h"
 #include "packet/OutboundPacket.h"
-#include "../crypto/AES.h"
-#include "../game/player/Player.h"
+#include "crypto/AES.h"
+#include "game/player/Player.h"
 
 #include <memory>
 #include <boost/asio.hpp>
 #include <vector>
+#include <queue>
 #include <toml++/toml.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <chrono>
@@ -51,6 +52,10 @@ public:
 
     void send_join_game();
     void start_keep_alive_timer();
+    int getPing() const;
+
+    std::chrono::steady_clock::time_point last_keep_alive_sent_;
+    int ping_ms_ = 0;
 
 private:
     explicit Connection(boost::asio::io_context& io_context);
@@ -76,9 +81,12 @@ private:
     State state_ = State::HANDSHAKE;
     uint64_t last_keep_alive_id_;
     boost::asio::steady_timer keep_alive_timer_;
+    boost::asio::io_context::strand write_strand_;
 
     std::shared_ptr<Player> player;
-    // Добавь это в секцию private:
-    std::vector<uint8_t> incoming_buffer_; // Буфер для склейки кусков пакетов
-    void process_incoming_buffer();        // Метод для нарезки потока на пакеты
+    std::vector<uint8_t> incoming_buffer_;
+    std::queue<std::shared_ptr<std::vector<uint8_t>>> write_queue_;
+    bool writing_ = false;
+    void process_incoming_buffer();
+    void do_write();
 };

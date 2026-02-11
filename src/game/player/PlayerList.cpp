@@ -1,9 +1,9 @@
-#include "../../../include/game/player/PlayerList.h"
-#include "../../../include/network/packet/play/PlayerInfoPacket.h"
-#include "../../../include/network/packet/play/SpawnNamedEntityPacket.h"
-#include "../../../include/network/packet/play/EntityMetadataPacket.h"
-#include "../../../include/network/Connection.h"
-#include "../../../include/game/player/Player.h"
+#include "game/player/PlayerList.h"
+#include "network/packet/outbound/play/PlayerInfoPacket.h"
+#include "network/packet/outbound/play/SpawnNamedEntityPacket.h"
+#include "network/packet/outbound/play/EntityMetadataPacket.h"
+#include "network/Connection.h"
+#include "game/player/Player.h"
 
 PlayerList& PlayerList::getInstance() {
     static PlayerList instance;

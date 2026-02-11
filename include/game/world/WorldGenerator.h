@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Chunk.h"
+#include "game/world/Chunk.h"
 
 class WorldGenerator {
 public:

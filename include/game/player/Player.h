@@ -4,10 +4,10 @@
 #include <memory>
 #include <vector>
 
-#include "../../auth/UUID.h"
-#include "../../other/Vector3.h"
-#include "../../other/Vector2.h"
-#include "../../other/ChatColor.h"
+#include "auth/UUID.h"
+#include "other/Vector3.h"
+#include "other/Vector2.h"
+#include "other/ChatColor.h"
 
 class Connection; // Forward declaration
 class Packet;     // Forward declaration
@@ -29,6 +29,13 @@ enum class MainHand {
     RIGHT
 };
 
+enum class Gamemode {
+    SURVIVAL = 0,
+    CREATIVE = 1,
+    ADVENTURE = 2,
+    SPECTATOR = 3
+};
+
 class Player {
 public:
     Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection);
@@ -46,6 +53,7 @@ public:
     bool isDead() const;
     bool isOnGround() const;
     short getHeldItemSlot() const;
+    Gamemode getGamemode() const;
     const std::vector<Slot>& getInventory() const;
     bool isFlying() const;
     uint8_t getViewDistance() const;
@@ -75,6 +83,7 @@ public:
     void setChatColors(bool chatColors);
     void setDisplayedSkinParts(uint8_t displayedSkinParts);
     void setMainHand(MainHand mainHand);
+    void setGamemode(Gamemode gamemode);
 
     // Actions
     void kill();
@@ -106,4 +115,5 @@ private:
     bool chatColors;
     uint8_t displayedSkinParts;
     MainHand mainHand;
+    Gamemode gamemode;
 };

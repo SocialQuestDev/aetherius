@@ -1,5 +1,5 @@
-#include "../../include/network/Metadata.h"
-#include "../../include/network/PacketBuffer.h"
+#include "network/Metadata.h"
+#include "network/PacketBuffer.h"
 
 void Metadata::addByte(uint8_t index, uint8_t value) {
     data.push_back(index);

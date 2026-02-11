@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Packet.h"
+#include "network/packet/Packet.h"
 
 class Connection;
 

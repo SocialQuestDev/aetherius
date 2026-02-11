@@ -1,13 +1,13 @@
-#include "../../include/auth/MojangAuthHelper.h"
-#include "../../include/Server.h"
-#include "../../include/network/Http.h"
-#include "../../include/utility/StringUtilities.h"
+#include "auth/MojangAuthHelper.h"
+#include "Server.h"
+#include "network/Http.h"
+#include "utility/StringUtilities.h"
 #include <nlohmann/json.hpp>
 
 #include <openssl/sha.h>
 #include <random>
 
-#include "../../include/console/Logger.h"
+#include "console/Logger.h"
 
 using json = nlohmann::json;
 

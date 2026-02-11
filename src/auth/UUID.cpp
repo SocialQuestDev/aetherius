@@ -1,4 +1,4 @@
-#include "../../include/auth/UUID.h"
+#include "auth/UUID.h"
 #include <ios>
 
 std::string get_offline_UUID(const std::string& nickname) {

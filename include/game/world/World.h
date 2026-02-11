@@ -4,9 +4,12 @@
 #include <memory>
 #include <vector>
 #include <cstdint>
-#include "Chunk.h"
-#include "WorldGenerator.h"
-#include "../../other/Vector3.h"
+#include <mutex>
+#include <future>
+#include <boost/asio/thread_pool.hpp>
+#include "game/world/Chunk.h"
+#include "game/world/WorldGenerator.h"
+#include "other/Vector3.h"
 
 class World {
 public:
@@ -14,6 +17,7 @@ public:
 
     ChunkColumn* getChunk(int x, int z);
     ChunkColumn* generateChunk(int x, int z);
+    std::future<ChunkColumn*> generateChunkAsync(int x, int z);
     std::vector<uint8_t> getDimensionCodec();
     std::vector<uint8_t> getDimension();
 
@@ -23,4 +27,6 @@ public:
 private:
     std::map<std::pair<int, int>, ChunkColumn> chunks;
     std::unique_ptr<WorldGenerator> generator;
+    std::mutex chunks_mutex_;
+    std::unique_ptr<boost::asio::thread_pool> thread_pool_;
 };

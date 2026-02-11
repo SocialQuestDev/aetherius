@@ -1,4 +1,4 @@
-#include "../../include/utility/VectorUtilities.h"
+#include "utility/VectorUtilities.h"
 #include <cstring>
 
 bool vectors_equal(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b) {

@@ -1,4 +1,4 @@
-#include "../../include/crypto/AES.h"
+#include "crypto/AES.h"
 
 CryptoState aes::init_crypto(const std::vector<uint8_t>& secret)
 {

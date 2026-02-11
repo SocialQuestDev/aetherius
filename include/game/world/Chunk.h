@@ -4,8 +4,8 @@
 #include <string>
 #include <cstdint>
 
-#include "../nbt/NbtBuilder.h"
-#include "../../network/PacketBuffer.h"
+#include "game/nbt/NbtBuilder.h"
+#include "network/PacketBuffer.h"
 
 class ChunkSection {
 public:

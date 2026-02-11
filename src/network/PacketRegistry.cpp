@@ -1,5 +1,5 @@
-#include "../../include/network/PacketRegistry.h"
-#include "../../include/network/packet/InboundPacket.h"
+#include "network/PacketRegistry.h"
+#include "network/packet/InboundPacket.h"
 
 void PacketRegistry::registerPacket(State state, int packetId, InboundPacketCreator creator) {
     inboundPacketCreators[state][packetId] = std::move(creator);

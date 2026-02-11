@@ -1,7 +1,7 @@
-#include "../../../include/commands/gameCommands/PingCommand.h"
-#include "../../../include/network/packet/play/ChatMessagePacket.h"
-#include "../../../include/console/Logger.h"
-#include "../../../include/game/player/Player.h"
+#include "commands/gameCommands/PingCommand.h"
+#include "network/packet/outbound/play/ChatMessagePacket.h"
+#include "console/Logger.h"
+#include "game/player/Player.h"
 
 void PingCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
     if (player) {

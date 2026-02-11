@@ -1,6 +1,6 @@
-#include "../../../include/commands/consoleCommands/HelpCommand.h"
-#include "../../../include/Server.h"
-#include "../../../include/console/Logger.h"
+#include "commands/consoleCommands/HelpCommand.h"
+#include "Server.h"
+#include "console/Logger.h"
 
 void HelpCommand::execute(std::shared_ptr<Player> player, const std::vector<std::string>& args) {
     LOG_INFO("Available console commands:");

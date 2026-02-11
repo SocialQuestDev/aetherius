@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../GameCommand.h"
+#include "commands/GameCommand.h"
 
 class PingCommand : public GameCommand {
 public:

@@ -1,33 +1,33 @@
 #include <memory>
-#include "../include/Server.h"
-#include "../include/commands/CommandRegistry.h"
-#include "../include/console/Logger.h"
-#include "../include/game/player/PlayerList.h"
-#include "../include/crypto/RSA.h"
-#include "../include/utility/ConfigValidator.h"
-#include "../include/game/world/WorldGenerator.h"
-#include "../include/network/packet/handshake/HandshakePacket.h"
-#include "../include/network/packet/status/StatusRequestPacket.h"
-#include "../include/network/packet/status/StatusPingPacket.h"
-#include "../include/network/packet/login/LoginStartPacket.h"
-#include "../include/network/packet/login/EncryptionResponsePacket.h"
-#include "../include/network/packet/play/KeepAlivePacketPlay.h"
-#include "../include/network/packet/play/TeleportConfirmPacket.h"
-#include "../include/network/packet/play/ClientStatusPacket.h"
-#include "../include/network/packet/play/GetChatMessagePacket.h"
-#include "../include/network/packet/play/PlayerPositionPacket.h"
-#include "../include/network/packet/play/BlockDigRequestPacket.h"
-#include "../include/network/packet/play/HeldItemChangePacket.h"
-#include "../include/network/packet/play/SetCreativeSlotPacket.h"
-#include "../include/network/packet/play/ArmAnimationPacket.h"
-#include "../include/network/packet/play/BlockPlacePacket.h"
-#include "../include/network/packet/play/ClientAbilitiesPacket.h"
-#include "../include/network/packet/play/EntityActionPacket.h"
-#include "../include/network/packet/play/ClientSettingsPacket.h"
-#include "../include/commands/gameCommands/PingCommand.h"
-#include "../include/commands/gameCommands/KillCommand.h"
-#include "../include/commands/gameCommands/HelpGameCommand.h"
-#include "../include/commands/consoleCommands/HelpCommand.h"
+#include "Server.h"
+#include "commands/CommandRegistry.h"
+#include "console/Logger.h"
+#include "game/player/PlayerList.h"
+#include "crypto/RSA.h"
+#include "utility/ConfigValidator.h"
+#include "game/world/WorldGenerator.h"
+#include "network/packet/inbound/handshake/HandshakePacket.h"
+#include "network/packet/inbound/status/StatusRequestPacket.h"
+#include "network/packet/inbound/status/StatusPingPacket.h"
+#include "network/packet/inbound/login/LoginStartPacket.h"
+#include "network/packet/inbound/login/EncryptionResponsePacket.h"
+#include "network/packet/inbound/play/KeepAlivePacketPlay.h"
+#include "network/packet/inbound/play/TeleportConfirmPacket.h"
+#include "network/packet/inbound/play/ClientStatusPacket.h"
+#include "network/packet/inbound/play/GetChatMessagePacket.h"
+#include "network/packet/inbound/play/PlayerPositionPacket.h"
+#include "network/packet/inbound/play/BlockDigRequestPacket.h"
+#include "network/packet/inbound/play/HeldItemChangePacket.h"
+#include "network/packet/inbound/play/SetCreativeSlotPacket.h"
+#include "network/packet/inbound/play/ArmAnimationPacket.h"
+#include "network/packet/inbound/play/BlockPlacePacket.h"
+#include "network/packet/inbound/play/ClientAbilitiesPacket.h"
+#include "network/packet/inbound/play/EntityActionPacket.h"
+#include "network/packet/inbound/play/ClientSettingsPacket.h"
+#include "commands/gameCommands/PingCommand.h"
+#include "commands/gameCommands/KillCommand.h"
+#include "commands/gameCommands/HelpGameCommand.h"
+#include "commands/consoleCommands/HelpCommand.h"
 
 Server* Server::instance;
 
@@ -65,12 +65,8 @@ Server::Server(boost::asio::io_context& io_context) : acceptor_(io_context), io_
     acceptor_.bind(endpoint);
     acceptor_.listen();
 
-    cur_rsa = rsa::generate();
-
-    if (!public_key) {
-        std::vector<uint8_t> tempPublicKey = rsa::get_public_key(cur_rsa);
-        public_key = std::make_unique<std::vector<uint8_t>>(tempPublicKey);
-    }
+    cur_rsa = nullptr;
+    boost::asio::post(io_context_, [this]() { init_rsa_async(); });
 
     register_packets();
     register_commands();
@@ -110,13 +106,16 @@ PacketRegistry& Server::get_packet_registry() {
 }
 
 std::vector<uint8_t>& Server::get_public_key() const {
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(rsa_mutex_));
+    if (!rsa_initialized_)
+        throw std::runtime_error("RSA is not yet initialized");
     return *public_key;
 }
 
 std::vector<uint8_t> Server::decrypt_rsa(const std::vector<uint8_t>& data) const {
+    std::lock_guard<std::mutex> lock(const_cast<std::mutex&>(rsa_mutex_));
     if (!cur_rsa)
         throw std::runtime_error("RSA is not initialized");
-
     return rsa::decrypt(cur_rsa, data);
 }
 
@@ -164,6 +163,17 @@ void Server::start_accept() {
         [this, new_connection](const boost::system::error_code& error) {
             handle_accept(new_connection, error);
         });
+}
+
+void Server::init_rsa_async() {
+    auto rsa = rsa::generate();
+    std::vector<uint8_t> tempPublicKey = rsa::get_public_key(rsa);
+
+    std::lock_guard<std::mutex> lock(rsa_mutex_);
+    cur_rsa = rsa;
+    public_key = std::make_unique<std::vector<uint8_t>>(tempPublicKey);
+    rsa_initialized_ = true;
+    LOG_INFO("RSA encryption initialized");
 }
 
 void Server::handle_accept(const std::shared_ptr<Connection> &new_connection, const boost::system::error_code& error) {

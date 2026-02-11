@@ -1,8 +1,8 @@
-#include "../../include/commands/CommandRegistry.h"
-#include "../../include/network/packet/play/ChatMessagePacket.h"
-#include "../../include/utility/String.h"
-#include "../../include/console/Logger.h"
-#include "../../include/game/player/Player.h"
+#include "commands/CommandRegistry.h"
+#include "network/packet/outbound/play/ChatMessagePacket.h"
+#include "utility/String.h"
+#include "console/Logger.h"
+#include "game/player/Player.h"
 
 void CommandRegistry::registerGameCommand(std::unique_ptr<GameCommand> command) {
     gameCommands[command->getName()] = std::move(command);

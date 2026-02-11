@@ -1,4 +1,4 @@
-#include "../../include/utility/StringUtilities.h"
+#include "utility/StringUtilities.h"
 #include <algorithm>
 #include <cctype>
 

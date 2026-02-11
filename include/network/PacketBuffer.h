@@ -4,8 +4,8 @@
 #include <cstdint>
 #include <stdexcept>
 #include <cstring>
-#include "../auth/UUID.h"
-#include "../crypto/AES.h"
+#include "auth/UUID.h"
+#include "crypto/AES.h"
 
 struct Vector3;
 

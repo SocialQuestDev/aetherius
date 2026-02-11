@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../PacketBuffer.h"
+#include "network/PacketBuffer.h"
 
 class Connection; // Forward declaration
 

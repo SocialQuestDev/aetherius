@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <functional>
-#include "../network/Connection.h"
+#include "network/Connection.h"
 
 class Command {
 public:

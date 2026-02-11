@@ -1,10 +1,14 @@
-#include "../../../include/game/world/World.h"
-#include "../../../include/game/nbt/NbtBuilder.h"
+#include "game/world/World.h"
+#include "game/nbt/NbtBuilder.h"
 #include <cmath>
+#include <boost/asio/post.hpp>
 
-World::World(std::unique_ptr<WorldGenerator> generator) : generator(std::move(generator)) {}
+World::World(std::unique_ptr<WorldGenerator> generator)
+    : generator(std::move(generator)),
+      thread_pool_(std::make_unique<boost::asio::thread_pool>(std::thread::hardware_concurrency())) {}
 
 ChunkColumn* World::getChunk(int x, int z) {
+    std::lock_guard<std::mutex> lock(chunks_mutex_);
     auto it = chunks.find({x, z});
     if (it != chunks.end()) {
         return &it->second;
@@ -17,8 +21,32 @@ ChunkColumn* World::generateChunk(int x, int z) {
     chunk.x = x;
     chunk.z = z;
     generator->generateChunk(chunk);
+
+    std::lock_guard<std::mutex> lock(chunks_mutex_);
     auto [it, success] = chunks.emplace(std::make_pair(x, z), chunk);
     return &it->second;
+}
+
+std::future<ChunkColumn*> World::generateChunkAsync(int x, int z) {
+    auto promise = std::make_shared<std::promise<ChunkColumn*>>();
+    auto future = promise->get_future();
+
+    boost::asio::post(*thread_pool_, [this, x, z, promise]() {
+        try {
+            ChunkColumn chunk;
+            chunk.x = x;
+            chunk.z = z;
+            generator->generateChunk(chunk);
+
+            std::lock_guard<std::mutex> lock(chunks_mutex_);
+            auto [it, success] = chunks.emplace(std::make_pair(x, z), chunk);
+            promise->set_value(&it->second);
+        } catch (...) {
+            promise->set_exception(std::current_exception());
+        }
+    });
+
+    return future;
 }
 
 int World::getBlock(const Vector3& position) {

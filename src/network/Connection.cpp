@@ -1,18 +1,20 @@
-#include "../../include/network/Connection.h"
-#include "../../include/console/Logger.h"
-#include "../../include/game/world/Chunk.h"
-#include "../../include/Server.h"
-#include "../../include/game/player/PlayerList.h"
-#include "../../include/game/player/Player.h"
-#include "../../include/network/PacketRegistry.h"
-#include "../../include/network/packet/InboundPacket.h"
-#include "../../include/network/packet/OutboundPacket.h"
-#include "../../include/network/packet/play/JoinGamePacket.h"
-#include "../../include/network/packet/play/KeepAlivePacketClientbound.h"
-#include "../../include/network/packet/play/BrandPacket.h"
-#include "../../include/network/packet/play/PlayerInfoPacket.h"
-#include "../../include/network/packet/play/SpawnNamedEntityPacket.h"
-#include "../../include/network/packet/play/DeclareCommandsPacket.h"
+#include "network/Connection.h"
+#include "console/Logger.h"
+#include "game/world/Chunk.h"
+#include "Server.h"
+#include "game/player/PlayerList.h"
+#include "game/player/Player.h"
+#include "network/PacketRegistry.h"
+#include "network/packet/InboundPacket.h"
+#include "network/packet/OutboundPacket.h"
+#include "network/packet/outbound/play/JoinGamePacket.h"
+#include "network/packet/outbound/play/KeepAlivePacketClientbound.h"
+#include "network/packet/outbound/play/BrandPacket.h"
+#include "network/packet/outbound/play/PlayerInfoPacket.h"
+#include "network/packet/outbound/play/SpawnNamedEntityPacket.h"
+#include "network/packet/outbound/play/DeclareCommandsPacket.h"
+#include "network/packet/outbound/play/EntityMetadataPacket.h"
+#include "network/Metadata.h"
 
 #include <toml++/toml.hpp>
 #include <nlohmann/json.hpp>
@@ -25,6 +27,7 @@ using json = nlohmann::json;
 Connection::Connection(boost::asio::io_context& io_context)
     : socket_(io_context),
       keep_alive_timer_(io_context),
+      write_strand_(io_context),
       buffer_{} {}
 
 std::shared_ptr<Connection> Connection::create(boost::asio::io_context& io_context) {
@@ -199,12 +202,17 @@ void Connection::start_keep_alive_timer() {
 
 void Connection::send_keep_alive() {
     last_keep_alive_id_ = std::chrono::system_clock::now().time_since_epoch().count();
+    last_keep_alive_sent_ = std::chrono::steady_clock::now();
     KeepAlivePacketClientbound ka(last_keep_alive_id_);
     send_packet(ka);
 }
 
+int Connection::getPing() const {
+    return ping_ms_;
+}
+
 void Connection::send_join_game() {
-    JoinGamePacket joinGamePacket(player->getId(), Server::get_instance().get_world());
+    JoinGamePacket joinGamePacket(player, Server::get_instance().get_world());
     send_packet(joinGamePacket);
 
     BrandPacket brand("Aetherius");
@@ -215,28 +223,26 @@ void Connection::send_join_game() {
 
     player->teleportToSpawn();
 
-    if (!PlayerList::getInstance().getPlayers().empty()) {
-        if (!PlayerList::getInstance().getPlayers().empty()) {
-            PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
-            for (const auto& p : PlayerList::getInstance().getPlayers()) {
+    const auto& existingPlayers = PlayerList::getInstance().getPlayers();
+    if (!existingPlayers.empty()) {
+        PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
+        PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, existingPlayers);
+        send_packet(addExistingToCurrent);
+
+        SpawnNamedEntityPacket spawnCurrent(player);
+
+        for (const auto& p : existingPlayers) {
+            if (p->getId() != player->getId()) {
                 p->getConnection()->send_packet(addCurrentToAll);
-            }
+                p->getConnection()->send_packet(spawnCurrent);
 
-            PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, PlayerList::getInstance().getPlayers());
-            send_packet(addExistingToCurrent);
+                SpawnNamedEntityPacket spawnExisting(p);
+                send_packet(spawnExisting);
 
-            SpawnNamedEntityPacket spawnCurrent(player);
-            for (const auto& p : PlayerList::getInstance().getPlayers()) {
-                if (p->getId() != player->getId()) {
-                    p->getConnection()->send_packet(spawnCurrent);
-                }
-            }
-
-            for (const auto& p : PlayerList::getInstance().getPlayers()) {
-                if (p->getId() != player->getId()) {
-                    SpawnNamedEntityPacket spawnExisting(p);
-                    send_packet(spawnExisting);
-                }
+                Metadata existingMetadata;
+                existingMetadata.addByte(16, p->getDisplayedSkinParts());
+                EntityMetadataPacket existingMeta(p->getId(), existingMetadata);
+                send_packet(existingMeta);
             }
         }
     }
@@ -311,7 +317,36 @@ void Connection::send_packet(PacketBuffer& packet) {
 void Connection::send_packet_raw(std::vector<uint8_t> data) {
     auto self(shared_from_this());
     auto d = std::make_shared<std::vector<uint8_t>>(std::move(data));
-    boost::asio::async_write(socket_, boost::asio::buffer(*d), [self, d](const boost::system::error_code& ec, std::size_t){});
+
+    boost::asio::post(write_strand_, [this, self, d]() {
+        write_queue_.push(d);
+        if (!writing_) {
+            do_write();
+        }
+    });
+}
+
+void Connection::do_write() {
+    if (write_queue_.empty()) {
+        writing_ = false;
+        return;
+    }
+
+    writing_ = true;
+    auto self(shared_from_this());
+    auto data = write_queue_.front();
+
+    boost::asio::async_write(socket_, boost::asio::buffer(*data),
+        boost::asio::bind_executor(write_strand_,
+            [this, self, data](const boost::system::error_code& ec, std::size_t) {
+                if (!ec) {
+                    write_queue_.pop();
+                    do_write();
+                } else {
+                    writing_ = false;
+                    if (player) player->disconnect();
+                }
+            }));
 }
 
 void Connection::send_light_data(int chunkX, int chunkZ) {}
