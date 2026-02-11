@@ -15,6 +15,7 @@
 #include "network/packet/outbound/play/DeclareCommandsPacket.h"
 #include "network/packet/outbound/play/EntityMetadataPacket.h"
 #include "network/packet/outbound/play/TimeUpdatePacket.h"
+#include "network/packet/outbound/play/PlayerPositionAndLookPacket.h"
 #include "network/Metadata.h"
 
 #include <toml++/toml.hpp>
@@ -229,7 +230,10 @@ void Connection::send_join_game() {
     DeclareCommandsPacket commandsPacket(Server::get_instance().get_command_registry());
     send_packet(commandsPacket);
 
-    player->teleportToSpawn();
+    Vector3 pos = player->getPosition();
+    Vector2 rot = player->getRotation();
+    PlayerPositionAndLookPacket posLookPacket(pos.x, pos.y, pos.z, rot.x, rot.y, 0x00, player->getId());
+    send_packet(posLookPacket);
 
     // Send own metadata to the joining player
     Metadata ownMetadata;

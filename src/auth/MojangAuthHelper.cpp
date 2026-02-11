@@ -69,7 +69,7 @@ std::string auth::generate_profile_url(const std::string& uuid) {
     return "https://sessionserver.mojang.com/session/minecraft/profile/" + uuid;
 }
 
-PlayerData auth::get_uuid(const std::string& nickname) {
+PlayerMg auth::get_uuid(const std::string& nickname) {
     std::string url = generate_uuid_url(nickname);
 
     url = trim(url);

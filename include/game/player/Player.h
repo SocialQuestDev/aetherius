@@ -8,6 +8,7 @@
 #include "other/Vector3.h"
 #include "other/Vector2.h"
 #include "other/ChatColor.h"
+#include "PlayerData.h"
 
 class Connection; // Forward declaration
 class Packet;     // Forward declaration

@@ -14,12 +14,18 @@
 #include "network/Metadata.h"
 #include "network/packet/outbound/play/EntityEquipmentPacket.h"
 #include "network/packet/outbound/play/EntityMetadataPacket.h"
+#include "game/player/PlayerData.h"
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
     : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),
       position(0.0, 7.0, 0.0), rotation(0.0f, 0.0f), health(20.0f), food(20), dead(false), onGround(false),
       heldItemSlot(0), inventory(46), flying(false), viewDistance(8), sneaking(false), sprinting(false),
-      locale("en_US"), chatMode(ChatMode::ENABLED), chatColors(true), displayedSkinParts(0x7F), mainHand(MainHand::RIGHT) {}
+      locale("en_US"), chatMode(ChatMode::ENABLED), chatColors(true), displayedSkinParts(0x7F), mainHand(MainHand::RIGHT) {
+    if (!PlayerData::load(*this)) {
+        // New player, save initial data
+        PlayerData::save(*this);
+    }
+}
 
 // Getters
 int Player::getId() const { return id; }
@@ -133,6 +139,8 @@ void Player::teleportToSpawn() {
 }
 
 void Player::disconnect() const {
+    PlayerData::save(*this);
+
     // Проверяем, есть ли игрок в списке (избегаем повторного отключения)
     if (!PlayerList::getInstance().getPlayer(getId())) {
         return;
