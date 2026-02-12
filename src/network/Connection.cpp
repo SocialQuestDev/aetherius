@@ -280,9 +280,9 @@ void Connection::broadcast_player_join() {
         }
     }
 
-    //PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
-    //PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, allPlayers);
-    //send_packet(addExistingToCurrent);
+    PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
+    PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, allPlayers);
+    send_packet(addExistingToCurrent);
 
     if (!existingPlayers.empty()) {
         SpawnNamedEntityPacket spawnCurrent(player);
@@ -294,7 +294,7 @@ void Connection::broadcast_player_join() {
         std::vector<std::pair<EquipmentSlot, Slot>> currentEquipment = player->getFullEquipment();
 
         for (const auto& p : existingPlayers) {
-            //p->getConnection()->send_packet(addCurrentToAll);
+            p->getConnection()->send_packet(addCurrentToAll);
             p->getConnection()->send_packet(spawnCurrent);
             p->getConnection()->send_packet(currentMeta);
             for(const auto& equip : currentEquipment) {

@@ -26,5 +26,5 @@ void EntityEquipmentPacket::write(PacketBuffer& buffer) {
 }
 
 int EntityEquipmentPacket::getPacketId() const {
-    return 0x50;
+    return 0x47;
 }
