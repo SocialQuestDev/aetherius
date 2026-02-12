@@ -9,6 +9,5 @@ struct HttpResponse
 };
 
 namespace http {
-    // supports https!!
     HttpResponse get(const std::string& url);
 }

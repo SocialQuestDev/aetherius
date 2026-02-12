@@ -3,6 +3,8 @@
 #include <iomanip>
 #include <ctime>
 
+#include "Server.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -59,11 +61,18 @@ void Logger::Log(const LogLevel level, const std::string& message,const char* fu
                               : std::cout;
 
     switch (level) {
-        case LogLevel::INFO:     levelStr = " INFO  "; labelColor = ANSI_INVERSE ANSI_COLOR_WHITE; msgColor = ANSI_COLOR_WHITE; break;
-        case LogLevel::DEBUG:    levelStr = " DEBUG "; labelColor = ANSI_INVERSE ANSI_COLOR_GREEN; msgColor = ANSI_COLOR_GREEN; break;
-        case LogLevel::WARNING:  levelStr = " WARN  "; labelColor = ANSI_INVERSE ANSI_COLOR_YELLOW; msgColor = ANSI_COLOR_YELLOW; break;
-        case LogLevel::ERROR:    levelStr = " ERROR "; labelColor = ANSI_INVERSE ANSI_COLOR_RED; msgColor = ANSI_COLOR_RED; break;
-        case LogLevel::FATAL:    levelStr = " FATAL "; labelColor = ANSI_INVERSE ANSI_COLOR_256_DARK_RED; msgColor = ANSI_COLOR_256_DARK_RED; break;
+        case LogLevel::INFO:     levelStr = "INFO"; labelColor = ANSI_INVERSE ANSI_COLOR_WHITE; msgColor = ANSI_COLOR_WHITE; break;
+        case LogLevel::DEBUG: {
+            if (!Server::get_instance().get_config()["server"]["debug"].value_or(false)) return;;
+
+            levelStr = "DBUG";
+            labelColor = ANSI_INVERSE ANSI_COLOR_GREEN;
+            msgColor = ANSI_COLOR_GREEN;
+            break;
+        }
+        case LogLevel::WARNING:  levelStr = "WARN"; labelColor = ANSI_INVERSE ANSI_COLOR_YELLOW; msgColor = ANSI_COLOR_YELLOW; break;
+        case LogLevel::ERROR:    levelStr = "EROR"; labelColor = ANSI_INVERSE ANSI_COLOR_RED; msgColor = ANSI_COLOR_RED; break;
+        case LogLevel::FATAL:    levelStr = "FATL"; labelColor = ANSI_INVERSE ANSI_COLOR_256_DARK_RED; msgColor = ANSI_COLOR_256_DARK_RED; break;
     }
 
     const std::string filePath(file);

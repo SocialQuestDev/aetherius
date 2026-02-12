@@ -2,14 +2,13 @@
 #include "crypto/AES.h"
 #include "console/Logger.h"
 #include "other/deflate.h"
-#include <cstdint>
 #include <cstring>
 #include <vector>
 #include <arpa/inet.h>
 
 #include "other/Vector3.h"
+#include "game/player/Player.h"
 
-// read methods...
 uint8_t PacketBuffer::readByte() {
     if (readerIndex >= data.size()) {
         throw std::runtime_error("Buffer overflow: trying to read beyond data size");
@@ -79,7 +78,6 @@ double PacketBuffer::readDouble() {
     return res;
 }
 
-// Убедись, что readUShort у тебя такой же (Big Endian)
 unsigned short PacketBuffer::readUShort() {
     if (readerIndex + 2 > data.size()) {
         throw std::runtime_error("Buffer overflow: readUShort");
@@ -199,7 +197,7 @@ void PacketBuffer::readNbt() {
         }
         case 10: // TAG_Compound
             while (readByte() != 0) {
-                readerIndex -= 1; // Go back one byte to let the loop handle the tag
+                readerIndex -= 1;
                 readNbt();
             }
             break;
@@ -212,8 +210,6 @@ void PacketBuffer::readNbt() {
     }
 }
 
-
-// write methods...
 void PacketBuffer::writeByte(uint8_t value) { data.push_back(value); }
 void PacketBuffer::writeBoolean(bool value) { writeByte(value ? 1 : 0); }
 
@@ -293,33 +289,34 @@ void PacketBuffer::writeNbt(const std::vector<uint8_t>& nbtData) {
     data.insert(data.end(), nbtData.begin(), nbtData.end());
 }
 
-// other
+void PacketBuffer::writeSlot(const Slot& slot) {
+    if (slot.itemId == 0) {
+        writeBoolean(false); // Item not present
+    } else {
+        writeBoolean(true);  // Item present
+        writeVarInt(slot.itemId);
+        writeByte(slot.count);
+        writeByte(0); // No NBT data
+    }
+}
 
 std::vector<uint8_t> PacketBuffer::finalize(bool compressionEnabled, int threshold, CryptoState* crypto) {
-    PacketBuffer payload_buf; // This will hold the data part of the packet ([Data Length] + [Data])
+    PacketBuffer payload_buf;
 
     if (compressionEnabled) {
         if ((int)this->data.size() >= threshold) {
-            // Data is large enough to be compressed
             std::vector<uint8_t> compressed = compressData(this->data);
 
-            // Write the size of the *uncompressed* data
             payload_buf.writeVarInt(this->data.size());
-            // Append the *compressed* data
             payload_buf.data.insert(payload_buf.data.end(), compressed.begin(), compressed.end());
         } else {
-            // Data is too small, send uncompressed
-            // Write 0 as data length to indicate uncompressed packet
             payload_buf.writeVarInt(0);
-            // Append the uncompressed data
             payload_buf.data.insert(payload_buf.data.end(), this->data.begin(), this->data.end());
         }
     } else {
-        // Compression is not enabled at all for this connection
         payload_buf.data = this->data;
     }
 
-    // Now, create the final packet by prepending the total length of the payload
     PacketBuffer final_packet_buf;
     final_packet_buf.writeVarInt(payload_buf.data.size());
     final_packet_buf.data.insert(final_packet_buf.data.end(), payload_buf.data.begin(), payload_buf.data.end());

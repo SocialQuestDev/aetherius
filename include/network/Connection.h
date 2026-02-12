@@ -43,8 +43,8 @@ public:
     void set_protocol_version(int version);
     int get_protocol_version() const;
 
-    void set_waiting_for_encryption(bool waiting);
-    bool is_waiting_for_encryption() const;
+    void set_waiting_for_encryption_response(bool waiting);
+    bool is_waiting_for_encryption_response() const;
 
     bool is_connected() const;
     void enable_encryption(const std::vector<uint8_t>& shared_secret);
@@ -56,6 +56,7 @@ public:
     void send_join_game();
     void broadcast_player_join();
     void start_keep_alive_timer();
+    void handle_keep_alive(uint64_t id);
     int getPing() const;
     void update_chunks();
 
@@ -76,19 +77,18 @@ private:
     std::unique_ptr<CryptoState> crypto_state;
     std::unique_ptr<std::vector<uint8_t>> verify_token;
 
-    bool waiting_for_response = false;
     bool connected = false;
     bool encrypt = false;
-    bool just_enabled_encryption = false;
     bool compression_enabled = false;
-    bool waitingForResponse = false;
+    bool waiting_for_keep_alive_ = false;
+    bool waiting_for_encryption_response_ = false;
     int protocol_version = 751;
     std::string nickname;
     std::vector<uint8_t> stream_buffer_;
     tcp::socket socket_;
     uint8_t buffer_[4096]{};
     State state_ = State::HANDSHAKE;
-    uint64_t last_keep_alive_id_;
+    uint64_t last_keep_alive_id_ = 0;
     boost::asio::steady_timer keep_alive_timer_;
     boost::asio::io_context::strand write_strand_;
 

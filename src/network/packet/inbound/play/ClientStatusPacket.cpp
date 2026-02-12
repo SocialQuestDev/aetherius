@@ -6,12 +6,11 @@
 #include "game/player/Player.h"
 
 void ClientStatusPacket::handle(Connection& connection) {
-    if (actionId == 0) { // Perform respawn
+    if (actionId == 0) {
         LOG_DEBUG("Player requested respawn.");
 
         Server& server = Server::get_instance();
 
-        // packet_respawn: 0x3A
         PacketBuffer rb;
         rb.writeVarInt(0x39);
         rb.writeNbt(server.get_world().getDimension());

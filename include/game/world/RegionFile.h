@@ -20,8 +20,8 @@ public:
 
 private:
     struct ChunkLocation {
-        uint32_t offset; // Offset in 4KB sectors
-        uint8_t size;    // Size in 4KB sectors
+        uint32_t offset;
+        uint8_t size;
     };
 
     void readHeader();

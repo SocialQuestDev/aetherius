@@ -16,6 +16,9 @@
 #include "network/packet/outbound/play/EntityMetadataPacket.h"
 #include "network/packet/outbound/play/TimeUpdatePacket.h"
 #include "network/packet/outbound/play/PlayerPositionAndLookPacket.h"
+#include "network/packet/outbound/play/DisconnectPacketPlay.h"
+#include "network/packet/outbound/play/EntityEquipmentPacket.h"
+#include "network/packet/outbound/play/ChunkDataPacket.h"
 #include "network/Metadata.h"
 
 #include <toml++/toml.hpp>
@@ -85,12 +88,12 @@ std::vector<uint8_t> Connection::get_verify_token() const {
     return verify_token ? *verify_token : std::vector<uint8_t>();
 }
 
-void Connection::set_waiting_for_encryption(bool waiting) {
-    this->waiting_for_response = waiting;
+void Connection::set_waiting_for_encryption_response(bool waiting) {
+    this->waiting_for_encryption_response_ = waiting;
 }
 
-bool Connection::is_waiting_for_encryption() const {
-    return waiting_for_response;
+bool Connection::is_waiting_for_encryption_response() const {
+    return waiting_for_encryption_response_;
 }
 
 bool Connection::is_connected() const {
@@ -204,9 +207,15 @@ void Connection::process_incoming_buffer() {
 
 void Connection::start_keep_alive_timer() {
     auto self(shared_from_this());
-    keep_alive_timer_.expires_after(std::chrono::seconds(15));
+    keep_alive_timer_.expires_after(std::chrono::seconds(30));
     keep_alive_timer_.async_wait([this, self](const boost::system::error_code& ec) {
         if (!ec && state_ == State::PLAY) {
+            if (waiting_for_keep_alive_) {
+                DisconnectPacketPlay disconnect("Timed out!");
+                send_packet(disconnect);
+                player->disconnect();
+                return;
+            }
             send_keep_alive();
             start_keep_alive_timer();
         }
@@ -216,8 +225,17 @@ void Connection::start_keep_alive_timer() {
 void Connection::send_keep_alive() {
     last_keep_alive_id_ = std::chrono::system_clock::now().time_since_epoch().count();
     last_keep_alive_sent_ = std::chrono::steady_clock::now();
+    waiting_for_keep_alive_ = true;
     KeepAlivePacketClientbound ka(last_keep_alive_id_);
     send_packet(ka);
+}
+
+void Connection::handle_keep_alive(uint64_t id) {
+    if (id == last_keep_alive_id_) {
+        waiting_for_keep_alive_ = false;
+        auto now = std::chrono::steady_clock::now();
+        ping_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_keep_alive_sent_).count();
+    }
 }
 
 int Connection::getPing() const {
@@ -262,21 +280,27 @@ void Connection::broadcast_player_join() {
         }
     }
 
-    PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
-    PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, allPlayers);
-    send_packet(addExistingToCurrent);
+    //PlayerInfoPacket addCurrentToAll(PlayerInfoPacket::ADD_PLAYER, {player});
+    //PlayerInfoPacket addExistingToCurrent(PlayerInfoPacket::ADD_PLAYER, allPlayers);
+    //send_packet(addExistingToCurrent);
 
     if (!existingPlayers.empty()) {
         SpawnNamedEntityPacket spawnCurrent(player);
         Metadata currentMetadata;
         currentMetadata.addByte(16, player->getDisplayedSkinParts());
         EntityMetadataPacket currentMeta(player->getId(), currentMetadata);
-        send_packet(currentMeta);
+
+        // Create equipment packet for the new player
+        std::vector<std::pair<EquipmentSlot, Slot>> currentEquipment = player->getFullEquipment();
 
         for (const auto& p : existingPlayers) {
-            p->getConnection()->send_packet(addCurrentToAll);
+            //p->getConnection()->send_packet(addCurrentToAll);
             p->getConnection()->send_packet(spawnCurrent);
             p->getConnection()->send_packet(currentMeta);
+            for(const auto& equip : currentEquipment) {
+                EntityEquipmentPacket packet(player->getId(), equip.first, equip.second);
+                p->getConnection()->send_packet(packet);
+            }
 
             SpawnNamedEntityPacket spawnExisting(p);
             send_packet(spawnExisting);
@@ -285,6 +309,13 @@ void Connection::broadcast_player_join() {
             existingMetadata.addByte(16, p->getDisplayedSkinParts());
             EntityMetadataPacket existingMeta(p->getId(), existingMetadata);
             send_packet(existingMeta);
+
+            // Create and send equipment packet for existing players
+            std::vector<std::pair<EquipmentSlot, Slot>> existingEquipment = p->getFullEquipment();
+            for(const auto& equip : existingEquipment) {
+                EntityEquipmentPacket packet(p->getId(), equip.first, equip.second);
+                send_packet(packet);
+            }
         }
     }
 
@@ -358,7 +389,7 @@ void Connection::update_chunks() {
     }
 
     PacketBuffer vp;
-    vp.writeVarInt(0x40);
+    vp.writeVarInt(0x40); // Update View Position
     vp.writeVarInt(chunkX);
     vp.writeVarInt(chunkZ);
     send_packet(vp);
@@ -379,11 +410,8 @@ void Connection::update_chunks() {
             if (!wasLoaded) {
                 world.getOrGenerateChunk(cx, cz, [this, self = shared_from_this()](ChunkColumn* chunk) {
                     if (socket_.is_open() && chunk) {
-                        PacketBuffer cp;
-                        cp.writeVarInt(0x20);
-                        auto p = chunk->serialize();
-                        cp.data.insert(cp.data.end(), p.begin(), p.end());
-                        send_packet(cp);
+                        ChunkDataPacket packet(chunk);
+                        send_packet(packet);
                     }
                 });
             }

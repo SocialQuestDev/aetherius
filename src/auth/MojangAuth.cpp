@@ -1,17 +1,18 @@
-#include "auth/MojangAuthHelper.h"
-#include "Server.h"
+#include "auth/MojangAuth.h"
 #include "network/Http.h"
-#include "utility/StringUtilities.h"
-#include <nlohmann/json.hpp>
-
-#include <openssl/sha.h>
-#include <random>
-
+#include "utils/StringUtilities.h"
 #include "console/Logger.h"
+#include <nlohmann/json.hpp>
+#include <openssl/evp.h>
+#include <random>
+#include <boost/multiprecision/cpp_int.hpp>
 
 using json = nlohmann::json;
 
-std::string minecraft_sha1_to_hex(const unsigned char* hash) {
+MojangAuth::MojangAuth() = default;
+MojangAuth::~MojangAuth() = default;
+
+std::string MojangAuth::minecraftSha1ToHex(const unsigned char* hash) {
     using boost::multiprecision::cpp_int;
 
     cpp_int num = 0;
@@ -33,44 +34,46 @@ std::string minecraft_sha1_to_hex(const unsigned char* hash) {
     return ss.str();
 }
 
-std::string calc_server_hash(
+std::string MojangAuth::calculateServerHash(
     const std::string& serverId,
     const std::vector<uint8_t>& secret,
     const std::vector<uint8_t>& pubKey
 ) {
-    SHA_CTX ctx;
-    SHA1_Init(&ctx);
+    EVP_MD_CTX* mdctx = EVP_MD_CTX_new();
+    const EVP_MD* md = EVP_sha1();
+    unsigned char hash[EVP_MAX_MD_SIZE];
+    unsigned int hash_len;
 
-    SHA1_Update(&ctx, serverId.data(), serverId.size());
-    SHA1_Update(&ctx, secret.data(), secret.size());
-    SHA1_Update(&ctx, pubKey.data(), pubKey.size());
+    EVP_DigestInit_ex(mdctx, md, NULL);
+    EVP_DigestUpdate(mdctx, serverId.data(), serverId.size());
+    EVP_DigestUpdate(mdctx, secret.data(), secret.size());
+    EVP_DigestUpdate(mdctx, pubKey.data(), pubKey.size());
+    EVP_DigestFinal_ex(mdctx, hash, &hash_len);
+    EVP_MD_CTX_free(mdctx);
 
-    unsigned char hash[20];
-    SHA1_Final(hash, &ctx);
-
-    return minecraft_sha1_to_hex(hash);
+    return minecraftSha1ToHex(hash);
 }
 
-std::vector<uint8_t> auth::generate_verify_token() {
+std::vector<uint8_t> MojangAuth::generateVerifyToken() {
     std::vector<uint8_t> token(4);
 
     std::random_device rd;
     for (auto& b : token)
-        b = rd();
+        b = static_cast<uint8_t>(rd());
 
     return token;
 }
 
-std::string auth::generate_uuid_url(const std::string& nickname) {
+std::string MojangAuth::generateUuidUrl(const std::string& nickname) {
     return "https://api.mojang.com/users/profiles/minecraft/" + nickname;
 }
 
-std::string auth::generate_profile_url(const std::string& uuid) {
+std::string MojangAuth::generateProfileUrl(const std::string& uuid) {
     return "https://sessionserver.mojang.com/session/minecraft/profile/" + uuid;
 }
 
-PlayerMg auth::get_uuid(const std::string& nickname) {
-    std::string url = generate_uuid_url(nickname);
+Auth::PlayerProfile MojangAuth::getPlayerProfile(const std::string& nickname) {
+    std::string url = generateUuidUrl(nickname);
 
     url = trim(url);
 
@@ -92,7 +95,7 @@ PlayerMg auth::get_uuid(const std::string& nickname) {
 
     const UUID uuid = string_to_uuid(uuidRaw);
 
-    std::string profileUrl = generate_profile_url(uuidRaw);
+    std::string profileUrl = generateProfileUrl(uuidRaw);
 
     profileUrl = trim(profileUrl);
 

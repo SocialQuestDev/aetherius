@@ -3,7 +3,7 @@
 #include "game/player/Player.h"
 #include "network/packet/OutboundPacket.h"
 
-class World; // Forward declaration
+class World;
 
 class JoinGamePacket : public OutboundPacket {
 public:

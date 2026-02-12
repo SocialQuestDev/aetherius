@@ -4,6 +4,7 @@
 #include "game/world/World.h"
 #include "game/world/Chunk.h"
 #include "game/player/Player.h"
+#include "network/packet/outbound/play/ChunkDataPacket.h"
 #include <cmath>
 #include <boost/asio.hpp>
 #include <functional>
@@ -13,9 +14,6 @@
 #include <atomic>
 #include <map>
 
-// Sends chunks in expanding rings around the player. All chunks in a single ring
-// are processed in parallel for maximum speed, with a delay between rings to
-// allow the client to keep up, preventing freezes.
 class RingedChunkSender : public std::enable_shared_from_this<RingedChunkSender> {
 public:
     RingedChunkSender(std::shared_ptr<Connection> conn, int centerChunkX, int centerChunkZ)
@@ -27,7 +25,6 @@ public:
         int viewDistance = conn->getPlayer()->getViewDistance();
         if (viewDistance > 10) viewDistance = 10;
 
-        // Group coordinates by ring distance (Chebyshev distance)
         std::map<int, std::vector<std::pair<int, int>>> rings;
         for (int z = -viewDistance; z <= viewDistance; ++z) {
             for (int x = -viewDistance; x <= viewDistance; ++x) {
@@ -36,7 +33,6 @@ public:
             }
         }
 
-        // Convert map to a vector of vectors for ordered processing.
         for (int i = 0; i <= viewDistance; ++i) {
             if (rings.count(i)) {
                 rings_to_load_.push_back(std::move(rings[i]));
@@ -45,7 +41,6 @@ public:
     }
 
     void start() {
-        // Start processing the first ring (center chunk) with no delay.
         schedule_next_ring(std::chrono::milliseconds(0));
     }
 
@@ -61,7 +56,7 @@ private:
 
     void process_ring() {
         if (rings_to_load_.empty() || !conn_->is_connected()) {
-            return; // All rings sent or player disconnected.
+            return;
         }
 
         auto ring = rings_to_load_.front();
@@ -70,22 +65,17 @@ private:
         auto completion_counter = std::make_shared<std::atomic<size_t>>(0);
         size_t ring_size = ring.size();
 
-        // Process all chunks in the current ring in parallel.
         for (const auto& coord : ring) {
             world_.getOrGenerateChunk(coord.first, coord.second, [self = shared_from_this(), completion_counter, ring_size](ChunkColumn* chunk) {
                 if (chunk) {
-                    auto serialized_chunk = std::make_shared<std::vector<uint8_t>>(chunk->serialize());
+                    auto packet = std::make_shared<ChunkDataPacket>(chunk);
 
-                    boost::asio::post(self->conn_->get_write_strand(), [self, serialized_chunk]() {
+                    boost::asio::post(self->conn_->get_write_strand(), [self, packet]() {
                         if (!self->conn_->is_connected()) return;
-                        PacketBuffer cp;
-                        cp.writeVarInt(0x20); // Chunk Data Packet ID
-                        cp.data.insert(cp.data.end(), serialized_chunk->begin(), serialized_chunk->end());
-                        self->conn_->send_packet(cp);
+                        self->conn_->send_packet(*packet);
                     });
                 }
 
-                // If this was the last chunk in the ring, schedule the next ring.
                 if (completion_counter->fetch_add(1) + 1 == ring_size) {
                     self->schedule_next_ring(std::chrono::milliseconds(30));
                 }
@@ -109,12 +99,11 @@ void TeleportConfirmPacket::handle(Connection& connection) {
     int chunkZ = static_cast<int>(std::floor(pos.z / 16.0));
 
     PacketBuffer vp;
-    vp.writeVarInt(0x40); // Update View Position
+    vp.writeVarInt(0x40);
     vp.writeVarInt(chunkX);
     vp.writeVarInt(chunkZ);
     connection.send_packet(vp);
 
-    // Start the fully asynchronous, ring-based chunk sender.
     std::make_shared<RingedChunkSender>(connection.shared_from_this(), chunkX, chunkZ)->start();
 }
 

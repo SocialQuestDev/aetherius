@@ -1,6 +1,6 @@
 #include "commands/CommandRegistry.h"
 #include "network/packet/outbound/play/ChatMessagePacket.h"
-#include "utility/String.h"
+#include "utils/String.h"
 #include "console/Logger.h"
 #include "game/player/Player.h"
 

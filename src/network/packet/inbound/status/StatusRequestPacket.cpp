@@ -42,5 +42,4 @@ void StatusRequestPacket::handle(Connection& connection) {
 }
 
 void StatusRequestPacket::read(PacketBuffer &buffer) {
-    // Nothing to read
 }

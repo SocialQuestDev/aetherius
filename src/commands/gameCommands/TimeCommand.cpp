@@ -62,7 +62,6 @@ void TimeCommand::execute(std::shared_ptr<Player> sender, const std::vector<std:
 
         world.setTimeOfDay(newTime);
 
-        // Broadcast time update to all players
         TimeUpdatePacket timePacket(world.getWorldAge(), world.getTimeOfDay());
         for (const auto& player : PlayerList::getInstance().getPlayers()) {
             player->getConnection()->send_packet(timePacket);

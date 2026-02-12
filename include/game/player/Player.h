@@ -8,10 +8,11 @@
 #include "other/Vector3.h"
 #include "other/Vector2.h"
 #include "other/ChatColor.h"
+#include "auth/Auth.h"
 
-// Forward declare to avoid circular dependencies
 class Connection;
 class Packet;
+enum class EquipmentSlot;
 
 struct Slot {
     int itemId = 0;
@@ -40,7 +41,6 @@ class Player {
 public:
     Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection);
 
-    // Getters
     int getId() const;
     UUID getUuid() const;
     std::string getNickname() const;
@@ -54,10 +54,11 @@ public:
     bool isOnGround() const;
     short getHeldItemSlot() const;
     Gamemode getGamemode() const;
+    std::unique_ptr<Auth>& getAuth();
+    std::vector<std::pair<EquipmentSlot, Slot>> getFullEquipment() const;
 
-    // Overloaded getInventory()
-    const std::vector<Slot>& getInventory() const; // For read-only access
-    std::vector<Slot>& getInventory();             // For read-write access
+    const std::vector<Slot>& getInventory() const;
+    std::vector<Slot>& getInventory();
 
     bool isFlying() const;
     uint8_t getViewDistance() const;
@@ -69,7 +70,6 @@ public:
     uint8_t getDisplayedSkinParts() const;
     MainHand getMainHand() const;
 
-    // Setters
     void setPosition(const Vector3& position);
     void setRotation(const Vector2& rotation);
     void setHealth(float health);
@@ -88,12 +88,15 @@ public:
     void setDisplayedSkinParts(uint8_t displayedSkinParts);
     void setMainHand(MainHand mainHand);
     void setGamemode(Gamemode gamemode);
+    void setAuth(std::unique_ptr<Auth> auth);
+    void setUuid(UUID uuid);
+    void setSkin(const std::string& skin);
 
-    // Actions
     void kill();
     void teleportToSpawn();
-    void disconnect() const;
+    void disconnect(std::string reason = "Disconnected") const;
     void sendChatMessage(const std::string &message, ChatColor color = ChatColor::WHITE, UUID senderUuid = UUID()) const;
+    void broadcastEquipmentUpdate() const;
 
 private:
     int id;
@@ -101,8 +104,8 @@ private:
     std::string nickname;
     std::string skin;
     std::shared_ptr<Connection> connection;
+    std::unique_ptr<Auth> auth;
 
-    // Player state
     Vector3 position;
     Vector2 rotation;
     float health;

@@ -17,8 +17,8 @@ ChunkColumn* World::getChunk(int x, int z) {
     std::lock_guard<std::mutex> lock(chunks_mutex_);
     auto it = chunks.find({x, z});
     if (it != chunks.end()) {
-        it->second.touch();
-        return &it->second;
+        it->second->touch();
+        return it->second.get();
     }
     return nullptr;
 }
@@ -41,38 +41,39 @@ void World::getOrGenerateChunk(int x, int z, std::function<void(ChunkColumn*)> c
             return;
         }
 
-        auto chunk = std::make_unique<ChunkColumn>();
-        chunk->x = x;
-        chunk->z = z;
+        auto chunk = std::make_unique<ChunkColumn>(x, z);
 
         if (storage->loadChunk(x, z, *chunk)) {
             std::lock_guard<std::mutex> lock(chunks_mutex_);
-            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(*chunk));
-            it->second.touch();
-            callback(&it->second);
+            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(chunk));
+            it->second->touch();
+            callback(it->second.get());
         } else {
             generator->generateChunk(*chunk);
             asyncSaveChunk(*chunk);
 
             std::lock_guard<std::mutex> lock(chunks_mutex_);
-            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(*chunk));
-            it->second.touch();
-            callback(&it->second);
+            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(chunk));
+            it->second->touch();
+            callback(it->second.get());
         }
     });
 }
 
 void World::asyncSaveChunk(const ChunkColumn& chunk) {
-    auto chunk_copy = std::make_shared<ChunkColumn>(chunk);
-    boost::asio::post(*thread_pool_, [this, chunk_copy]() {
-        storage->saveChunk(*chunk_copy);
+    auto dataToSave = std::make_shared<std::vector<uint8_t>>(chunk.serializeForFile());
+    int chunkX = chunk.getX();
+    int chunkZ = chunk.getZ();
+
+    boost::asio::post(*thread_pool_, [this, chunkX, chunkZ, dataToSave]() {
+        storage->saveChunkData(chunkX, chunkZ, *dataToSave);
     });
 }
 
 void World::syncSaveAllChunks() {
     std::lock_guard<std::mutex> lock(chunks_mutex_);
     for (const auto& pair : chunks) {
-        storage->saveChunk(pair.second);
+        storage->saveChunkData(pair.first.first, pair.first.second, pair.second->serializeForFile());
     }
 }
 
@@ -95,9 +96,9 @@ void World::updateChunkStatuses() {
     std::lock_guard<std::mutex> lock(chunks_mutex_);
     for (auto& [pos, chunk] : chunks) {
         if (active_chunks_coords.contains(pos)) {
-            chunk.status = ChunkStatus::TICKING;
+            chunk->status = ChunkStatus::TICKING;
         } else {
-            chunk.status = ChunkStatus::VISUAL;
+            chunk->status = ChunkStatus::VISUAL;
         }
     }
 }
@@ -123,7 +124,7 @@ void World::unloadInactiveChunks() {
         std::lock_guard<std::mutex> lock(chunks_mutex_);
         for (auto const& [pos, chunk] : chunks) {
             if (!keep_alive_chunks.contains(pos)) {
-                if (std::chrono::steady_clock::now() - chunk.last_accessed > unload_threshold) {
+                if (std::chrono::steady_clock::now() - chunk->last_accessed > unload_threshold) {
                     to_unload_coords.push_back(pos);
                 }
             }
@@ -132,28 +133,24 @@ void World::unloadInactiveChunks() {
 
     if (!to_unload_coords.empty()) {
         for (const auto& pos : to_unload_coords) {
-            boost::asio::post(*thread_pool_, [this, pos, &unload_threshold]() {
-                ChunkColumn chunk_copy;
-                bool should_erase = false;
+            std::unique_ptr<ChunkColumn> chunk_to_save;
+            bool should_erase = false;
 
-                {
-                    std::lock_guard<std::mutex> lock(chunks_mutex_);
-                    auto it = chunks.find(pos);
-                    if (it != chunks.end()) {
-                        if (std::chrono::steady_clock::now() - it->second.last_accessed > unload_threshold) {
-                            chunk_copy = it->second;
-                            should_erase = true;
-                        }
+            {
+                std::lock_guard<std::mutex> lock(chunks_mutex_);
+                auto it = chunks.find(pos);
+                if (it != chunks.end()) {
+                    if (std::chrono::steady_clock::now() - it->second->last_accessed > unload_threshold) {
+                        chunk_to_save = std::move(it->second);
+                        should_erase = true;
+                        chunks.erase(it);
                     }
                 }
+            }
 
-                if (should_erase) {
-                    storage->saveChunk(chunk_copy);
-
-                    std::lock_guard<std::mutex> lock(chunks_mutex_);
-                    chunks.erase(pos);
-                }
-            });
+            if (should_erase && chunk_to_save) {
+                asyncSaveChunk(*chunk_to_save);
+            }
         }
         LOG_DEBUG("Scheduled " + std::to_string(to_unload_coords.size()) + " inactive chunks for unloading.");
     }
@@ -189,7 +186,7 @@ void World::setBlock(const Vector3& position, int blockId) {
     if (blockZ < 0) blockZ += 16;
 
     chunk->setBlock(blockX, blockY, blockZ, blockId);
-    asyncSaveChunk(*chunk); // Use async save
+    asyncSaveChunk(*chunk);
 }
 
 void World::tick() {
@@ -206,8 +203,7 @@ void World::tick() {
 
     std::lock_guard<std::mutex> lock(chunks_mutex_);
     for (auto& [pos, chunk] : chunks) {
-        if (chunk.status == ChunkStatus::TICKING) {
-            // TODO: Add entity processing, random block updates, etc.
+        if (chunk->status == ChunkStatus::TICKING) {
         }
     }
 }
@@ -234,11 +230,10 @@ std::vector<uint8_t> World::getDimension() {
 
 std::vector<uint8_t> World::getDimensionCodec() {
     NbtBuilder nbt;
-    nbt.startCompound(); // Root
+    nbt.startCompound();
         nbt.startCompound("minecraft:dimension_type");
             nbt.writeTagString("type", "minecraft:dimension_type");
             nbt.startList("value", TAG_COMPOUND, 4);
-                // overworld
                 nbt.startListItem();
                     nbt.writeTagString("name", "minecraft:overworld");
                     nbt.writeTagInt("id", 0);
@@ -256,10 +251,9 @@ std::vector<uint8_t> World::getDimensionCodec() {
                         nbt.writeTagInt("logical_height", 256);
                         nbt.writeTagByte("natural", 1);
                         nbt.writeTagByte("respawn_anchor_works", 0);
-                    nbt.endCompound(); // End element
+                    nbt.endCompound();
                 nbt.endListItem();
 
-                // overworld_caves
                 nbt.startListItem();
                     nbt.writeTagString("name", "minecraft:overworld_caves");
                     nbt.writeTagInt("id", 1);
@@ -277,10 +271,9 @@ std::vector<uint8_t> World::getDimensionCodec() {
                         nbt.writeTagInt("logical_height", 256);
                         nbt.writeTagByte("natural", 1);
                         nbt.writeTagByte("respawn_anchor_works", 0);
-                    nbt.endCompound(); // End element
+                    nbt.endCompound();
                 nbt.endListItem();
 
-                // the_nether
                 nbt.startListItem();
                     nbt.writeTagString("name", "minecraft:the_nether");
                     nbt.writeTagInt("id", 2);
@@ -299,10 +292,9 @@ std::vector<uint8_t> World::getDimensionCodec() {
                         nbt.writeTagFloat("ambient_light", 0.1f);
                         nbt.writeTagByte("has_raids", 0);
                         nbt.writeTagByte("respawn_anchor_works", 1);
-                    nbt.endCompound(); // End element
+                    nbt.endCompound();
                 nbt.endListItem();
 
-                // the_end
                 nbt.startListItem();
                     nbt.writeTagString("name", "minecraft:the_end");
                     nbt.writeTagInt("id", 3);
@@ -321,9 +313,9 @@ std::vector<uint8_t> World::getDimensionCodec() {
                         nbt.writeTagFloat("ambient_light", 0.0f);
                         nbt.writeTagByte("has_raids", 1);
                         nbt.writeTagByte("respawn_anchor_works", 0);
-                    nbt.endCompound(); // End element
+                    nbt.endCompound();
                 nbt.endListItem();
-        nbt.endCompound(); // End dimension_type compound
+        nbt.endCompound();
 
         nbt.startCompound("minecraft:worldgen/biome");
             nbt.writeTagString("type", "minecraft:worldgen/biome");
@@ -349,8 +341,8 @@ std::vector<uint8_t> World::getDimensionCodec() {
                                 nbt.writeTagInt("block_search_extent", 8);
                                 nbt.writeTagInt("tick_delay", 6000);
                             nbt.endCompound();
-                        nbt.endCompound(); // End effects
-                    nbt.endCompound(); // End element
+                        nbt.endCompound();
+                    nbt.endCompound();
                 nbt.endListItem();
 
                 nbt.startListItem();
@@ -374,11 +366,11 @@ std::vector<uint8_t> World::getDimensionCodec() {
                                 nbt.writeTagInt("block_search_extent", 8);
                                 nbt.writeTagInt("tick_delay", 6000);
                             nbt.endCompound();
-                        nbt.endCompound(); // End effects
-                    nbt.endCompound(); // End element
+                        nbt.endCompound();
+                    nbt.endCompound();
                 nbt.endListItem();
-        nbt.endCompound(); // End biome compound
-    nbt.endCompound(); // End Root
+        nbt.endCompound();
+    nbt.endCompound();
     return nbt.buffer;
 }
 

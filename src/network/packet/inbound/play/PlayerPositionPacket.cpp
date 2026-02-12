@@ -8,7 +8,6 @@
 #include "network/packet/outbound/play/EntityRotationPacket.h"
 #include "network/packet/outbound/play/EntityHeadLookPacket.h"
 
-// PlayerPositionPacket
 void PlayerPositionPacket::read(PacketBuffer& buffer) {
     x = buffer.readDouble();
     y = buffer.readDouble();
@@ -25,7 +24,6 @@ void PlayerPositionPacket::handle(Connection& connection) {
             player->kill();
         }
 
-        // Update chunks if player moved to a new chunk
         connection.update_chunks();
 
         EntityTeleportPacket packet(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
@@ -39,7 +37,6 @@ void PlayerPositionPacket::handle(Connection& connection) {
     }
 }
 
-// PlayerPositionAndRotationPacket
 void PlayerPositionAndRotationPacket::read(PacketBuffer& buffer) {
     x = buffer.readDouble();
     y = buffer.readDouble();
@@ -59,7 +56,6 @@ void PlayerPositionAndRotationPacket::handle(Connection& connection) {
             player->kill();
         }
 
-        // Update chunks if player moved to a new chunk
         connection.update_chunks();
 
         EntityTeleportPacket teleport(player->getId(), player->getPosition(), player->getRotation().x, player->getRotation().y, player->isOnGround());
@@ -74,7 +70,6 @@ void PlayerPositionAndRotationPacket::handle(Connection& connection) {
     }
 }
 
-// PlayerRotationPacket
 void PlayerRotationPacket::read(PacketBuffer& buffer) {
     yaw = buffer.readFloat();
     pitch = buffer.readFloat();
@@ -99,7 +94,6 @@ void PlayerRotationPacket::handle(Connection& connection) {
     }
 }
 
-// PlayerOnGroundPacket
 void PlayerOnGroundPacket::read(PacketBuffer& buffer) {
     onGround = buffer.readBoolean();
 }

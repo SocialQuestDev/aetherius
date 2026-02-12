@@ -15,7 +15,7 @@ RegionFile* WorldStorage::getRegionFile(int regionX, int regionZ) {
         return it->second.get();
     }
 
-    std::string filePath = worldPath_ + "/r." + std::to_string(regionX) + "." + std::to_string(regionZ) + ".dat";
+    std::string filePath = worldPath_ + "/r." + std::to_string(regionX) + "." + std::to_string(regionZ) + ".mca";
     auto regionFile = std::make_unique<RegionFile>(filePath);
     auto* ptr = regionFile.get();
     regionFiles_.emplace(std::make_pair(regionX, regionZ), std::move(regionFile));
@@ -23,23 +23,21 @@ RegionFile* WorldStorage::getRegionFile(int regionX, int regionZ) {
 }
 
 bool WorldStorage::loadChunk(int x, int z, ChunkColumn& chunk) {
-    int regionX = x >> 5; // x / 32
-    int regionZ = z >> 5; // z / 32
+    int regionX = x >> 5;
+    int regionZ = z >> 5;
     RegionFile* region = getRegionFile(regionX, regionZ);
 
     std::vector<uint8_t> data;
-    if (region->getChunkData(x, z, data)) {
+    if (region->getChunkData(x & 31, z & 31, data)) {
         chunk.deserialize(data);
         return true;
     }
     return false;
 }
 
-void WorldStorage::saveChunk(const ChunkColumn& chunk) {
-    int regionX = chunk.x >> 5;
-    int regionZ = chunk.z >> 5;
+void WorldStorage::saveChunkData(int x, int z, const std::vector<uint8_t>& data) {
+    int regionX = x >> 5;
+    int regionZ = z >> 5;
     RegionFile* region = getRegionFile(regionX, regionZ);
-
-    std::vector<uint8_t> data = chunk.serializeForFile();
-    region->saveChunkData(chunk.x, chunk.z, data);
+    region->saveChunkData(x & 31, z & 31, data);
 }

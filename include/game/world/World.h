@@ -29,21 +29,19 @@ public:
     void unloadInactiveChunks();
     void updateChunkStatuses();
 
-    // Time system (20 ticks per second, 24000 ticks per day)
     void tick();
     int64_t getWorldAge() const;
     int64_t getTimeOfDay() const;
     void setTimeOfDay(int64_t time);
 
 private:
-    std::map<std::pair<int, int>, ChunkColumn> chunks;
+    std::map<std::pair<int, int>, std::unique_ptr<ChunkColumn>> chunks;
     std::unique_ptr<WorldGenerator> generator;
     std::unique_ptr<WorldStorage> storage;
     std::mutex chunks_mutex_;
     std::mutex generation_mutex_;
     std::unique_ptr<boost::asio::thread_pool> thread_pool_;
 
-    // Time tracking
     int64_t worldAge = 0;
     int64_t timeOfDay = 0;
 };

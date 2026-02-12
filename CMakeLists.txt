@@ -1,7 +1,15 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14)
 project(Aetherius)
 
 set(CMAKE_CXX_STANDARD 20)
+
+include(FetchContent)
+FetchContent_Declare(
+  magic_enum
+  GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
+  GIT_TAG v0.9.5
+)
+FetchContent_MakeAvailable(magic_enum)
 
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
@@ -36,3 +44,5 @@ target_link_libraries(Aetherius PRIVATE OpenSSL::Crypto)
 
 find_package(ZLIB REQUIRED)
 target_link_libraries(Aetherius PRIVATE ZLIB::ZLIB)
+
+target_link_libraries(Aetherius PRIVATE magic_enum::magic_enum)

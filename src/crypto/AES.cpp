@@ -1,57 +1,40 @@
 #include "crypto/AES.h"
+#include <stdexcept>
 
 CryptoState aes::init_crypto(const std::vector<uint8_t>& secret)
 {
     CryptoState c;
 
-    c.enc = EVP_CIPHER_CTX_new();
-    c.dec = EVP_CIPHER_CTX_new();
+    c.enc.reset(EVP_CIPHER_CTX_new());
+    c.dec.reset(EVP_CIPHER_CTX_new());
 
-    EVP_EncryptInit_ex(
-        c.enc,
-        EVP_aes_128_cfb8(),
-        nullptr,
-        secret.data(),
-        secret.data()
-    );
+    if (!c.enc || !c.dec) {
+        throw std::runtime_error("Failed to create EVP_CIPHER_CTX");
+    }
 
-    EVP_DecryptInit_ex(
-        c.dec,
-        EVP_aes_128_cfb8(),
-        nullptr,
-        secret.data(),
-        secret.data()
-    );
+    if (1 != EVP_EncryptInit_ex(c.enc.get(), EVP_aes_128_cfb8(), nullptr, secret.data(), secret.data())) {
+        throw std::runtime_error("Failed to initialize AES encryption");
+    }
+
+    if (1 != EVP_DecryptInit_ex(c.dec.get(), EVP_aes_128_cfb8(), nullptr, secret.data(), secret.data())) {
+        throw std::runtime_error("Failed to initialize AES decryption");
+    }
 
     return c;
 }
 
-void aes::encrypt(CryptoState& c,
-                    uint8_t* data,
-                    int len)
+void aes::encrypt(CryptoState& c, uint8_t* data, int len)
 {
     int out_len;
-
-    EVP_EncryptUpdate(
-        c.enc,
-        data,
-        &out_len,
-        data,
-        len
-    );
+    if (1 != EVP_EncryptUpdate(c.enc.get(), data, &out_len, data, len)) {
+        throw std::runtime_error("AES encryption failed");
+    }
 }
 
-void aes::decrypt(CryptoState& c,
-                    uint8_t* data,
-                    int len)
+void aes::decrypt(CryptoState& c, uint8_t* data, int len)
 {
     int out_len;
-
-    EVP_DecryptUpdate(
-        c.dec,
-        data,
-        &out_len,
-        data,
-        len
-    );
+    if (1 != EVP_DecryptUpdate(c.dec.get(), data, &out_len, data, len)) {
+        throw std::runtime_error("AES decryption failed");
+    }
 }

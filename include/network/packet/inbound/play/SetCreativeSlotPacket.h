@@ -1,6 +1,6 @@
 #pragma once
 #include "network/packet/InboundPacket.h"
-#include "game/player/Player.h" // For Slot
+#include "game/player/Player.h"
 
 class SetCreativeSlotPacket : public InboundPacket {
 public:

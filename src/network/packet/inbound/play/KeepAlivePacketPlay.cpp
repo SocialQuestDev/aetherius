@@ -7,9 +7,7 @@
 #include <chrono>
 
 void KeepAlivePacketPlay::handle(Connection& connection) {
-    auto now = std::chrono::steady_clock::now();
-    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - connection.last_keep_alive_sent_);
-    connection.ping_ms_ = static_cast<int>(duration.count());
+    connection.handle_keep_alive(keepAliveId);
 
     auto player = connection.getPlayer();
     if (player) {

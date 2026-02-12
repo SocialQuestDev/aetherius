@@ -4,11 +4,12 @@
 #include "Server.h"
 #include "game/player/PlayerList.h"
 #include "game/player/Player.h"
-#include "auth/MojangAuthHelper.h"
+#include "auth/Auth.h"
 #include "console/Logger.h"
 #include "network/packet/outbound/play/ChatMessagePacket.h"
 #include <cstddef>
 #include <stdexcept>
+#include <magic_enum.hpp>
 
 void LoginStartPacket::handle(Connection& connection) {
     LOG_INFO("New login attempt from " + connection.socket().remote_endpoint().address().to_string() + " with nickname: " + nickname);
@@ -34,8 +35,18 @@ void LoginStartPacket::handle(Connection& connection) {
         return;
     }
 
-    if (serverCfg["server"]["online_mode"].value_or(false)) {
-        std::vector<uint8_t> verifyTokenTemp = auth::generate_verify_token();
+    AuthType authType = static_cast<AuthType>(serverCfg["server"]["auth_mode"].value_or(0));
+    LOG_INFO("Using " + std::string(magic_enum::enum_name(authType)) + " auth");
+    std::unique_ptr<Auth> auth = Auth::Create(authType);
+
+    if (!auth) {
+        LOG_ERROR("Failed to create auth instance.");
+        // Disconnect or handle error appropriately
+        return;
+    }
+
+    if (authType == AuthType::Mojang) {
+        std::vector<uint8_t> verifyTokenTemp = auth->generateVerifyToken();
         connection.set_verify_token(verifyTokenTemp);
 
         PacketBuffer encReq;
@@ -44,8 +55,12 @@ void LoginStartPacket::handle(Connection& connection) {
         encReq.writeByteArray(server.get_public_key());
         encReq.writeByteArray(verifyTokenTemp);
 
-        connection.set_waiting_for_encryption(true);
+        connection.set_waiting_for_encryption_response(true);
         connection.send_packet_raw(encReq.finalize(false, -1, nullptr));
+
+        auto player = std::make_shared<Player>(PlayerList::getInstance().getNextPlayerId(), UUID(), nickname, "", connection.shared_from_this());
+        player->setAuth(std::move(auth));
+        connection.setPlayer(player);
 
         return;
     }
@@ -61,13 +76,14 @@ void LoginStartPacket::handle(Connection& connection) {
         connection.set_compression(true);
     }
 
-    UUID uuid = get_offline_UUID_128(nickname);
+    Auth::PlayerProfile profile = auth->getPlayerProfile(nickname);
 
-    auto player = std::make_shared<Player>(PlayerList::getInstance().getNextPlayerId(), uuid, nickname, "", connection.shared_from_this());
+    auto player = std::make_shared<Player>(PlayerList::getInstance().getNextPlayerId(), profile.uuid, nickname, profile.textures, connection.shared_from_this());
+    player->setAuth(std::move(auth));
     connection.setPlayer(player);
     PlayerList::getInstance().addPlayer(player);
 
-    LoginSuccessPacket success(uuid, nickname);
+    LoginSuccessPacket success(profile.uuid, nickname);
     connection.send_packet(success);
 
     connection.setState(State::PLAY);
@@ -75,7 +91,7 @@ void LoginStartPacket::handle(Connection& connection) {
     connection.start_keep_alive_timer();
 
     for (const auto& client: PlayerList::getInstance().getPlayers()) {
-        ChatMessagePacket packet(R"({"text":")" + nickname + R"( joined the game", "color":"yellow"})", 1, uuid);
+        ChatMessagePacket packet(R"({"text":")" + nickname + R"( joined the game", "color":"yellow"})", 1, profile.uuid);
         client.get()->getConnection()->send_packet(packet);
     }
 }

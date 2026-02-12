@@ -17,6 +17,7 @@ class Server {
 public:
     Server(boost::asio::io_context& io_context);
     static Server& get_instance();
+    void stop();
     toml::table& get_config();
     toml::table& get_world_config();
     std::vector<uint8_t>& get_public_key() const;
@@ -43,7 +44,7 @@ private:
     std::unique_ptr<ConsoleManager> console_manager_;
     toml::table config;
     static Server* instance;
-    RSA* cur_rsa;
+    EVP_PKEY* cur_rsa;
     std::unique_ptr<std::vector<uint8_t>> public_key;
     std::unique_ptr<World> world;
     PacketRegistry packet_registry_;
@@ -51,6 +52,5 @@ private:
     bool rsa_initialized_ = false;
     std::mutex rsa_mutex_;
 
-    // Tick system (20 ticks per second = 50ms per tick)
     boost::asio::steady_timer tick_timer_;
 };

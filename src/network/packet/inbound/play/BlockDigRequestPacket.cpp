@@ -5,7 +5,7 @@
 #include "network/packet/outbound/play/BlockDigResponsePacket.h"
 #include "network/packet/outbound/play/BlockChangePacket.h"
 #include "Server.h"
-#include "utility/MinecraftRegistry.hpp"
+#include "utils/MinecraftRegistry.hpp"
 
 void BlockDigRequestPacket::handle(Connection& connection) {
     std::shared_ptr<Player> digger = connection.getPlayer();

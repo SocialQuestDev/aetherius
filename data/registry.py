@@ -46,7 +46,7 @@ public:
 }};
 #endif"""
 
-    with open('../include/utility/MinecraftRegistry.hpp', 'w', encoding='utf-8') as f:
+    with open('../include/utils/MinecraftRegistry.hpp', 'w', encoding='utf-8') as f:
         f.write(hpp)
 
 generate()

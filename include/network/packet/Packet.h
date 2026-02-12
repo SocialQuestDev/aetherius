@@ -2,7 +2,7 @@
 
 #include "network/PacketBuffer.h"
 
-class Connection; // Forward declaration
+class Connection;
 
 class Packet {
 public:

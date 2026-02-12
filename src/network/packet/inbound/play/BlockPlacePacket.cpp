@@ -6,7 +6,7 @@
 #include "Server.h"
 #include "network/packet/outbound/play/BlockChangePacket.h"
 #include "console/Logger.h"
-#include "utility/MinecraftRegistry.hpp"
+#include "utils/MinecraftRegistry.hpp"
 void BlockPlacePacket::handle(Connection& connection) {
     auto player = connection.getPlayer();
     if (!player) return;
@@ -22,7 +22,6 @@ void BlockPlacePacket::handle(Connection& connection) {
     const RegistryEntry* itemInfo = MinecraftRegistry::getByItemId(heldItem.itemId);
     if (!itemInfo || itemInfo->stateId == -1) return;
 
-    // 1. Вычисляем позицию установки
     Vector3 placePos = position;
     switch (face) {
         case 0: placePos.y--; break;
@@ -34,9 +33,6 @@ void BlockPlacePacket::handle(Connection& connection) {
         default: break; 
     }
 
-    // --- НОВАЯ ЛОГИКА ПРОВЕРКИ КОЛЛИЗИЙ ---
-
-    // Определяем границы нового блока (куб 1x1x1)
     double minX = (double)placePos.x;
     double minY = (double)placePos.y;
     double minZ = (double)placePos.z;
@@ -44,10 +40,8 @@ void BlockPlacePacket::handle(Connection& connection) {
     double maxY = minY + 1.0;
     double maxZ = minZ + 1.0;
 
-    // Проверяем всех игроков
     for (const auto& p : PlayerList::getInstance().getPlayers()) {
         Vector3 pPos = p->getPosition();
-        // Размеры игрока в Minecraft примерно 0.6 в ширину и 1.8 в высоту
         double pMinX = pPos.x - 0.3;
         double pMaxX = pPos.x + 0.3;
         double pMinY = pPos.y;
@@ -55,7 +49,6 @@ void BlockPlacePacket::handle(Connection& connection) {
         double pMinZ = pPos.z - 0.3;
         double pMaxZ = pPos.z + 0.3;
 
-        // Проверка пересечения AABB
         bool intersects = (minX < pMaxX && maxX > pMinX) &&
                           (minY < pMaxY && maxY > pMinY) &&
                           (minZ < pMaxZ && maxZ > pMinZ);
@@ -63,16 +56,12 @@ void BlockPlacePacket::handle(Connection& connection) {
         if (intersects) {
             LOG_DEBUG("Cannot place block: Player " + p->getNickname() + " is in the way!");
             
-            // Важно: отправляем пакет BlockChange для старого блока, 
-            // чтобы у клиента "исчез" призрачный блок, который он поставил локально
             int oldStateId = Server::get_instance().get_world().getBlock(placePos);
             BlockChangePacket revertPacket(placePos, oldStateId);
             connection.send_packet(revertPacket);
             return; 
         }
     }
-
-    // --- КОНЕЦ ПРОВЕРКИ ---
 
     int finalStateId = itemInfo->stateId;
     Server::get_instance().get_world().setBlock(placePos, finalStateId);

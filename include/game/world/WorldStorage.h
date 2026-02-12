@@ -11,7 +11,7 @@ class WorldStorage {
 public:
     WorldStorage(const std::string& worldName);
     bool loadChunk(int x, int z, ChunkColumn& chunk);
-    void saveChunk(const ChunkColumn& chunk);
+    void saveChunkData(int x, int z, const std::vector<uint8_t>& data);
 
 private:
     RegionFile* getRegionFile(int regionX, int regionZ);

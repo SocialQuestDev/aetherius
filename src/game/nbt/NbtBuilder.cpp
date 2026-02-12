@@ -4,8 +4,6 @@
 #include <stdexcept>
 #include <vector>
 
-// native write
-
 void NbtBuilder::writeByte(int8_t v) { buffer.push_back(v); }
 
 void NbtBuilder::writeShort(int16_t v) {
@@ -42,8 +40,6 @@ void NbtBuilder::writeString(const std::string &s) {
     for (char c : s) writeByte(c);
 }
 
-// compound write
-
 void NbtBuilder::startCompound(const std::string &name) {
     writeByte(TAG_COMPOUND);
     writeString(name);
@@ -61,8 +57,6 @@ void NbtBuilder::endCompound() {
 void NbtBuilder::startCompound() {
     startCompound("");
 }
-
-// tags write
 
 void NbtBuilder::writeTagString(const std::string &name, const std::string &value) {
     writeByte(TAG_STRING);
@@ -137,7 +131,6 @@ void NbtBuilder::setReaderIndex(size_t index) {
     readerIndex = index;
 }
 
-// read methods...
 int8_t NbtBuilder::readByte() {
     if (readerIndex >= buffer.size()) throw std::runtime_error("NbtBuilder: readByte out of bounds");
     return buffer[readerIndex++];

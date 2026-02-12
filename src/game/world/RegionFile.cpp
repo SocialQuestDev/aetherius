@@ -8,7 +8,6 @@ RegionFile::RegionFile(const std::string& filePath) : filePath_(filePath) {
     std::lock_guard<std::mutex> lock(mutex_);
     file_.open(filePath_, std::ios::in | std::ios::out | std::ios::binary);
     if (!file_.is_open()) {
-        // File doesn't exist, create it and initialize the header
         file_.open(filePath_, std::ios::out | std::ios::binary);
         file_.close();
         file_.open(filePath_, std::ios::in | std::ios::out | std::ios::binary);
@@ -57,7 +56,7 @@ bool RegionFile::getChunkData(int chunkX, int chunkZ, std::vector<uint8_t>& data
     const auto& loc = locationTable_[index];
 
     if (loc.offset == 0 || loc.size == 0) {
-        return false; // Chunk not present
+        return false;
     }
 
     file_.seekg(loc.offset * SECTOR_SIZE);
@@ -80,13 +79,11 @@ void RegionFile::saveChunkData(int chunkX, int chunkZ, const std::vector<uint8_t
     auto& loc = locationTable_[index];
 
     if (loc.offset != 0 && loc.size >= sectorsNeeded) {
-        // Reuse existing space if it's large enough
         file_.seekp(loc.offset * SECTOR_SIZE);
     } else {
-        // Find new space at the end of the file
         file_.seekp(0, std::ios::end);
         uint32_t newOffset = (file_.tellp() + SECTOR_SIZE - 1) / SECTOR_SIZE;
-        if (newOffset == 0) newOffset = 1; // Skip header sector
+        if (newOffset == 0) newOffset = 1;
         loc.offset = newOffset;
         loc.size = sectorsNeeded;
         writeHeader();

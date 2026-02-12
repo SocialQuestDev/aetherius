@@ -8,6 +8,7 @@
 #include "crypto/AES.h"
 
 struct Vector3;
+struct Slot;
 
 class PacketBuffer {
 public:
@@ -17,7 +18,6 @@ public:
     explicit PacketBuffer(std::vector<uint8_t>& buffer) : data(buffer) {}
     PacketBuffer() = default;
     
-    // Read methods
     uint8_t readByte();
     bool readBoolean();
     int16_t readShort();
@@ -34,7 +34,6 @@ public:
     Vector3 readPosition();
     void readNbt();
 
-    // Write methods
     void writeByte(uint8_t value);
     void writeBoolean(bool value);
     void writeByteArray(const std::vector<uint8_t>& value);
@@ -50,6 +49,7 @@ public:
     void writeFloat(float value);
     void writeDouble(double value);
     void writeNbt(const std::vector<uint8_t>& nbt);
+    void writeSlot(const Slot& slot);
 
     std::vector<uint8_t> finalize(bool compressionEnabled, int threshold, CryptoState* crypto);
 };

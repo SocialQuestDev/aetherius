@@ -7,7 +7,7 @@ struct RegistryEntry {
     const char* name;
     int itemId;
     int blockId;
-    int stateId; // Добавили поле для State ID
+    int stateId;
 };
 
 class MinecraftRegistry {
@@ -655,7 +655,7 @@ public:
         {"netherite_scrap", 582, -1, -1},
         {"netherite_shovel", 609, -1, -1},
         {"netherite_sword", 608, -1, -1},
-        {"netherrack", 218, 193, 3999},
+        {"netherrack", 219, 194, 4000},
         {"note_block", 84, 74, 250},
         {"oak_boat", 667, -1, -1},
         {"oak_button", 305, 308, 6359},

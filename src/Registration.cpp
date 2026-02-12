@@ -54,10 +54,8 @@ void register_all_packets(PacketRegistry& registry) {
 }
 
 void register_all_commands(CommandRegistry& registry) {
-    // Console Commands
     registry.registerConsoleCommand(std::make_unique<HelpCommand>());
 
-    // Game Commands
     registry.registerGameCommand(std::make_unique<PingCommand>());
     registry.registerGameCommand(std::make_unique<KillCommand>());
     registry.registerGameCommand(std::make_unique<TimeCommand>());

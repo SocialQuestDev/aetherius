@@ -58,5 +58,5 @@ inline std::string to_string(ChatColor color) {
     if (it != color_names.end()) {
         return it->second;
     }
-    return "white"; // Default color
+    return "white";
 }

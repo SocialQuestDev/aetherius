@@ -12,5 +12,4 @@ void ClientAbilitiesPacket::handle(Connection& connection) {
 
 void ClientAbilitiesPacket::read(PacketBuffer& buffer) {
     flags = buffer.readByte();
-    // The flying speed and FOV modifier fields were removed in this protocol version.
 }
