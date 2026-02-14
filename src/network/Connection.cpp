@@ -1,6 +1,7 @@
 #include "network/Connection.h"
 #include "console/Logger.h"
 #include "game/world/Chunk.h"
+#include "game/world/ChunkManager.h"
 #include "Server.h"
 #include "game/player/PlayerList.h"
 #include "game/player/Player.h"
@@ -398,24 +399,108 @@ void Connection::update_chunks() {
     World& world = server.get_world();
     int viewDistance = player->getViewDistance();
 
-    for (int x = -viewDistance; x <= viewDistance; ++x) {
-        for (int z = -viewDistance; z <= viewDistance; ++z) {
-            int cx = chunkX + x;
-            int cz = chunkZ + z;
-
-            bool wasLoaded = (std::abs(cx - last_chunk_x_) <= viewDistance &&
-                            std::abs(cz - last_chunk_z_) <= viewDistance &&
-                            last_chunk_x_ != 0 && last_chunk_z_ != 0);
-
-            if (!wasLoaded) {
-                world.getOrGenerateChunk(cx, cz, [this, self = shared_from_this()](ChunkColumn* chunk) {
-                    if (socket_.is_open() && chunk) {
-                        ChunkDataPacket packet(chunk);
-                        send_packet(packet);
-                    }
-                });
+    // Clean up chunks that left view distance
+    std::vector<std::pair<int, int>> to_remove;
+    {
+        std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
+        for (const auto& [cx, cz] : sent_chunks_) {
+            if (std::abs(cx - chunkX) > viewDistance || std::abs(cz - chunkZ) > viewDistance) {
+                to_remove.emplace_back(cx, cz);
             }
         }
+        for (const auto& coord : to_remove) {
+            sent_chunks_.erase(coord);
+        }
+    }
+
+    // Build list of chunks to load with spiral priority
+    std::vector<std::tuple<int, int, int>> chunks_to_load;
+
+    {
+        std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
+        for (int x = -viewDistance; x <= viewDistance; ++x) {
+            for (int z = -viewDistance; z <= viewDistance; ++z) {
+                int cx = chunkX + x;
+                int cz = chunkZ + z;
+
+                bool alreadySent = sent_chunks_.contains({cx, cz});
+
+                if (!alreadySent) {
+                    int priority = ChunkManager::calculatePriority(cx, cz, chunkX, chunkZ);
+                    chunks_to_load.emplace_back(cx, cz, priority);
+                }
+            }
+        }
+    }
+
+    // Sort by priority (closest chunks first)
+    std::sort(chunks_to_load.begin(), chunks_to_load.end(),
+        [](const auto& a, const auto& b) { return std::get<2>(a) < std::get<2>(b); });
+
+    // Two-pass approach: send ALL loaded chunks first, then request new ones
+    // Loaded chunks are fast to serialize/send, so no strict limit
+    const size_t MAX_NEW_CHUNK_REQUESTS = 200;  // Limit only NEW chunk requests
+
+    int sent_immediately = 0;
+    int requested = 0;
+
+    // Pass 1: Send ALL already-loaded chunks (fast)
+    for (const auto& [cx, cz, priority] : chunks_to_load) {
+        if (auto* chunk = world.getChunk(cx, cz)) {
+            // Serialize packet to buffer immediately while chunk pointer is valid
+            ChunkDataPacket packet(chunk);
+            auto buffer = std::make_shared<PacketBuffer>();
+            packet.write(*buffer);
+
+            boost::asio::post(write_strand_, [this, self = shared_from_this(), buffer, cx, cz]() {
+                if (socket_.is_open()) {
+                    send_packet(*buffer);
+                    std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
+                    sent_chunks_.insert({cx, cz});
+                }
+            });
+            sent_immediately++;
+        }
+    }
+
+    // Pass 2: Request new chunks (limit to prevent overwhelming the system)
+    for (const auto& [cx, cz, priority] : chunks_to_load) {
+        if (requested >= MAX_NEW_CHUNK_REQUESTS) break;
+
+        if (!world.getChunk(cx, cz)) {  // Only if not already sent
+            // Not loaded - request async loading
+            world.requestChunk(cx, cz, priority, [this, self = shared_from_this(), cx, cz](ChunkColumn* chunk) {
+                if (socket_.is_open() && chunk) {
+                    // Serialize to buffer immediately while chunk pointer is valid
+                    ChunkDataPacket packet(chunk);
+                    auto buffer = std::make_shared<PacketBuffer>();
+                    packet.write(*buffer);
+
+                    boost::asio::post(write_strand_, [this, self, buffer, cx, cz]() {
+                        if (socket_.is_open()) {
+                            send_packet(*buffer);
+                            std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
+                            sent_chunks_.insert({cx, cz});
+                        }
+                    });
+                }
+            });
+            requested++;
+        }
+    }
+
+    int total_needed = chunks_to_load.size();
+    int deferred = total_needed - sent_immediately - requested;
+
+    // Process any chunks that finished loading
+    if (requested > 0) {
+        world.flushCompletedChunks();
+    }
+
+    if (sent_immediately > 0 || requested > 0) {
+        LOG_DEBUG("Chunks: " + std::to_string(sent_immediately) + " sent, " +
+                  std::to_string(requested) + " requested (" +
+                  std::to_string(deferred) + " deferred)");
     }
 
     last_chunk_x_ = chunkX;

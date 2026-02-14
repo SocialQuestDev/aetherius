@@ -3,77 +3,47 @@
 #include "game/player/PlayerList.h"
 #include "console/Logger.h"
 #include <cmath>
-#include <boost/asio/post.hpp>
 #include <vector>
 #include <set>
 #include <thread>
 
-World::World(std::unique_ptr<WorldGenerator> generator, const std::string& worldName)
-    : generator(std::move(generator)),
+World::World(std::unique_ptr<WorldGenerator> generator_param, const std::string& worldName)
+    : generator(std::move(generator_param)),
       storage(std::make_unique<WorldStorage>(worldName)),
-      thread_pool_(std::make_unique<boost::asio::thread_pool>(std::thread::hardware_concurrency())) {}
+      chunk_manager_(std::make_unique<ChunkManager>(generator.get(), storage.get())) {}
 
 ChunkColumn* World::getChunk(int x, int z) {
-    std::lock_guard<std::mutex> lock(chunks_mutex_);
-    auto it = chunks.find({x, z});
-    if (it != chunks.end()) {
-        it->second->touch();
-        return it->second.get();
-    }
-    return nullptr;
+    return chunk_manager_->getChunk(x, z);
+}
+
+void World::requestChunk(int x, int z, int priority, std::function<void(ChunkColumn*)> callback) {
+    // Process any completed chunks before requesting new ones
+    chunk_manager_->processCompletedChunks();
+    chunk_manager_->requestChunk(x, z, priority, std::move(callback));
 }
 
 void World::getOrGenerateChunk(int x, int z, std::function<void(ChunkColumn*)> callback) {
-    if (auto* chunk = getChunk(x, z)) {
-        callback(chunk);
-        return;
-    }
+    // Deprecated: Use requestChunk with priority instead
+    // Default priority = 0 for backwards compatibility
+    chunk_manager_->requestChunk(x, z, 0, std::move(callback));
+}
 
-    boost::asio::post(*thread_pool_, [this, x, z, callback]() {
-        if (auto* chunk = getChunk(x, z)) {
-            callback(chunk);
-            return;
-        }
-
-        std::lock_guard<std::mutex> gen_lock(generation_mutex_);
-        if (auto* chunk = getChunk(x, z)) {
-            callback(chunk);
-            return;
-        }
-
-        auto chunk = std::make_unique<ChunkColumn>(x, z);
-
-        if (storage->loadChunk(x, z, *chunk)) {
-            std::lock_guard<std::mutex> lock(chunks_mutex_);
-            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(chunk));
-            it->second->touch();
-            callback(it->second.get());
-        } else {
-            generator->generateChunk(*chunk);
-            asyncSaveChunk(*chunk);
-
-            std::lock_guard<std::mutex> lock(chunks_mutex_);
-            auto [it, success] = chunks.emplace(std::make_pair(x, z), std::move(chunk));
-            it->second->touch();
-            callback(it->second.get());
-        }
-    });
+void World::flushCompletedChunks() {
+    chunk_manager_->processCompletedChunks();
 }
 
 void World::asyncSaveChunk(const ChunkColumn& chunk) {
-    auto dataToSave = std::make_shared<std::vector<uint8_t>>(chunk.serializeForFile());
-    int chunkX = chunk.getX();
-    int chunkZ = chunk.getZ();
-
-    boost::asio::post(*thread_pool_, [this, chunkX, chunkZ, dataToSave]() {
-        storage->saveChunkData(chunkX, chunkZ, *dataToSave);
-    });
+    // Save is now handled by ChunkManager during generation
+    // For runtime saves (e.g., block changes), do immediate save
+    storage->saveChunkData(chunk.getX(), chunk.getZ(), chunk.serializeForFile());
 }
 
 void World::syncSaveAllChunks() {
-    std::lock_guard<std::mutex> lock(chunks_mutex_);
-    for (const auto& pair : chunks) {
-        storage->saveChunkData(pair.first.first, pair.first.second, pair.second->serializeForFile());
+    auto chunks = chunk_manager_->getAllChunks();
+    for (ChunkColumn* chunk : chunks) {
+        if (chunk) {
+            storage->saveChunkData(chunk->getX(), chunk->getZ(), chunk->serializeForFile());
+        }
     }
 }
 
@@ -93,12 +63,15 @@ void World::updateChunkStatuses() {
         }
     }
 
-    std::lock_guard<std::mutex> lock(chunks_mutex_);
-    for (auto& [pos, chunk] : chunks) {
-        if (active_chunks_coords.contains(pos)) {
-            chunk->status = ChunkStatus::TICKING;
-        } else {
-            chunk->status = ChunkStatus::VISUAL;
+    auto chunks = chunk_manager_->getAllChunks();
+    for (ChunkColumn* chunk : chunks) {
+        if (chunk) {
+            std::pair<int, int> pos = {chunk->getX(), chunk->getZ()};
+            if (active_chunks_coords.contains(pos)) {
+                chunk->status = ChunkStatus::TICKING;
+            } else {
+                chunk->status = ChunkStatus::VISUAL;
+            }
         }
     }
 }
@@ -120,9 +93,10 @@ void World::unloadInactiveChunks() {
         }
     }
 
-    {
-        std::lock_guard<std::mutex> lock(chunks_mutex_);
-        for (auto const& [pos, chunk] : chunks) {
+    auto chunks = chunk_manager_->getAllChunks();
+    for (ChunkColumn* chunk : chunks) {
+        if (chunk) {
+            std::pair<int, int> pos = {chunk->getX(), chunk->getZ()};
             if (!keep_alive_chunks.contains(pos)) {
                 if (std::chrono::steady_clock::now() - chunk->last_accessed > unload_threshold) {
                     to_unload_coords.push_back(pos);
@@ -133,26 +107,13 @@ void World::unloadInactiveChunks() {
 
     if (!to_unload_coords.empty()) {
         for (const auto& pos : to_unload_coords) {
-            std::unique_ptr<ChunkColumn> chunk_to_save;
-            bool should_erase = false;
-
-            {
-                std::lock_guard<std::mutex> lock(chunks_mutex_);
-                auto it = chunks.find(pos);
-                if (it != chunks.end()) {
-                    if (std::chrono::steady_clock::now() - it->second->last_accessed > unload_threshold) {
-                        chunk_to_save = std::move(it->second);
-                        should_erase = true;
-                        chunks.erase(it);
-                    }
-                }
-            }
-
-            if (should_erase && chunk_to_save) {
-                asyncSaveChunk(*chunk_to_save);
+            auto chunk_to_save = chunk_manager_->removeChunk(pos.first, pos.second);
+            if (chunk_to_save) {
+                storage->saveChunkData(chunk_to_save->getX(), chunk_to_save->getZ(),
+                                      chunk_to_save->serializeForFile());
             }
         }
-        LOG_DEBUG("Scheduled " + std::to_string(to_unload_coords.size()) + " inactive chunks for unloading.");
+        LOG_DEBUG("Unloaded " + std::to_string(to_unload_coords.size()) + " inactive chunks.");
     }
 }
 
@@ -193,6 +154,9 @@ void World::tick() {
     worldAge++;
     timeOfDay = (timeOfDay + 1) % 24000;
 
+    // Process completed chunks from worker threads
+    chunk_manager_->processCompletedChunks();
+
     if (worldAge % 20 == 0) {
         updateChunkStatuses();
     }
@@ -201,9 +165,10 @@ void World::tick() {
         unloadInactiveChunks();
     }
 
-    std::lock_guard<std::mutex> lock(chunks_mutex_);
-    for (auto& [pos, chunk] : chunks) {
-        if (chunk->status == ChunkStatus::TICKING) {
+    auto chunks = chunk_manager_->getAllChunks();
+    for (ChunkColumn* chunk : chunks) {
+        if (chunk && chunk->status == ChunkStatus::TICKING) {
+            // Chunk ticking logic here
         }
     }
 }

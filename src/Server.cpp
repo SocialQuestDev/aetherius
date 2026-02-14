@@ -168,40 +168,84 @@ std::vector<uint8_t> Server::decrypt_rsa(const std::vector<uint8_t>& data) const
 void Server::pre_generate_world() {
     LOG_INFO("Pre-generating spawn area...");
     const int radius = config["world"]["pregen_radius"].value_or(8);
+    LOG_DEBUG("Pregen radius: " + std::to_string(radius));
     const int total_chunks = (2 * radius + 1) * (2 * radius + 1);
+    LOG_DEBUG("Total chunks to generate: " + std::to_string(total_chunks));
     std::atomic<int> chunks_generated = 0;
     int last_percentage = -1;
     std::mutex percentage_mutex;
 
-    std::vector<std::future<void>> futures;
+    LOG_DEBUG("Creating chunk coordinates list...");
+    std::vector<std::pair<int, int>> chunk_coords;
 
+    // Generate spiral order for prioritized loading
     for (int x = -radius; x <= radius; ++x) {
         for (int z = -radius; z <= radius; ++z) {
-            auto promise = std::make_shared<std::promise<void>>();
-            futures.push_back(promise->get_future());
+            chunk_coords.emplace_back(x, z);
+        }
+    }
 
-            world->getOrGenerateChunk(x, z,
-                [this, &chunks_generated, total_chunks, &last_percentage, &percentage_mutex, p = std::move(promise)](ChunkColumn* chunk) {
+    LOG_DEBUG("Sorting coordinates by distance...");
+    // Sort by distance (spiral pattern)
+    std::sort(chunk_coords.begin(), chunk_coords.end(),
+        [](const auto& a, const auto& b) {
+            int dist_a = std::abs(a.first) + std::abs(a.second);
+            int dist_b = std::abs(b.first) + std::abs(b.second);
+            return dist_a < dist_b;
+        });
+
+    LOG_DEBUG("Preparing futures...");
+    std::vector<std::future<void>> futures;
+    futures.reserve(total_chunks);
+
+    if (!world) {
+        LOG_ERROR("World is null in pre_generate_world!");
+        return;
+    }
+
+    LOG_DEBUG("Requesting chunks...");
+    for (const auto& [x, z] : chunk_coords) {
+        LOG_DEBUG("Processing chunk " + std::to_string(x) + "," + std::to_string(z));
+        auto promise = std::make_shared<std::promise<void>>();
+        auto called = std::make_shared<std::atomic<bool>>(false);
+        futures.push_back(promise->get_future());
+
+        int priority = ChunkManager::calculatePriority(x, z, 0, 0);
+
+        LOG_DEBUG("Calling world->requestChunk...");
+        world->requestChunk(x, z, priority,
+            [&chunks_generated, total_chunks, &last_percentage, &percentage_mutex, p = promise, called](ChunkColumn* chunk) {
+                // Ensure callback only runs once
+                if (called->exchange(true)) {
+                    return;
+                }
+
                 if (chunk) {
                     int generated_count = ++chunks_generated;
 
                     std::lock_guard<std::mutex> lock(percentage_mutex);
                     int percentage = (generated_count * 100) / total_chunks;
-                    if (percentage > last_percentage) {
+                    if (percentage > last_percentage && percentage % 10 == 0) {
                         last_percentage = percentage;
                         LOG_INFO("Pre-generating world: " + std::to_string(percentage) + "%");
                     }
                 }
                 p->set_value();
             });
+    }
+
+    // Wait for all chunks while processing completed tasks
+    for (auto& future : futures) {
+        // Keep processing completed chunks until this future is ready
+        while (future.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) {
+            world->getChunkManager().processCompletedChunks();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
+        // Consume the future
+        future.get();
     }
 
-    for(auto& f : futures) {
-        f.get();
-    }
-
-    LOG_INFO("World pre-generation complete.");
+    LOG_INFO("World pre-generation complete. " + std::to_string(total_chunks) + " chunks loaded.");
 }
 
 void Server::start_accept() {

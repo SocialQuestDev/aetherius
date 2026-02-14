@@ -6,10 +6,10 @@
 #include <cstdint>
 #include <mutex>
 #include <functional>
-#include <boost/asio/thread_pool.hpp>
 #include "game/world/Chunk.h"
 #include "game/world/WorldGenerator.h"
 #include "game/world/WorldStorage.h"
+#include "game/world/ChunkManager.h"
 #include "other/Vector3.h"
 
 class World {
@@ -17,7 +17,10 @@ public:
     World(std::unique_ptr<WorldGenerator> generator, const std::string& worldName);
 
     ChunkColumn* getChunk(int x, int z);
-    void getOrGenerateChunk(int x, int z, std::function<void(ChunkColumn*)> callback);
+    void requestChunk(int x, int z, int priority, std::function<void(ChunkColumn*)> callback);
+    void getOrGenerateChunk(int x, int z, std::function<void(ChunkColumn*)> callback);  // Deprecated but kept for compatibility
+    void flushCompletedChunks();  // Force process all completed chunks immediately
+
     static std::vector<uint8_t> getDimensionCodec();
     static std::vector<uint8_t> getDimension();
 
@@ -34,13 +37,12 @@ public:
     int64_t getTimeOfDay() const;
     void setTimeOfDay(int64_t time);
 
+    ChunkManager& getChunkManager() { return *chunk_manager_; }
+
 private:
-    std::map<std::pair<int, int>, std::unique_ptr<ChunkColumn>> chunks;
     std::unique_ptr<WorldGenerator> generator;
     std::unique_ptr<WorldStorage> storage;
-    std::mutex chunks_mutex_;
-    std::mutex generation_mutex_;
-    std::unique_ptr<boost::asio::thread_pool> thread_pool_;
+    std::unique_ptr<ChunkManager> chunk_manager_;
 
     int64_t worldAge = 0;
     int64_t timeOfDay = 0;

@@ -9,6 +9,8 @@
 #include <boost/asio.hpp>
 #include <vector>
 #include <queue>
+#include <unordered_set>
+#include <mutex>
 #include <toml++/toml.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <chrono>
@@ -66,6 +68,14 @@ public:
     int ping_ms_ = 0;
     int last_chunk_x_ = 0;
     int last_chunk_z_ = 0;
+
+    struct PairHash {
+        std::size_t operator()(const std::pair<int, int>& p) const {
+            return std::hash<int>{}(p.first) ^ (std::hash<int>{}(p.second) << 1);
+        }
+    };
+    std::unordered_set<std::pair<int, int>, PairHash> sent_chunks_;
+    std::mutex sent_chunks_mutex_;
 
 private:
     explicit Connection(boost::asio::io_context& io_context);

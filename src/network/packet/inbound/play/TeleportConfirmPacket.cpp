@@ -3,6 +3,7 @@
 #include "Server.h"
 #include "game/world/World.h"
 #include "game/world/Chunk.h"
+#include "game/world/ChunkManager.h"
 #include "game/player/Player.h"
 #include "network/packet/outbound/play/ChunkDataPacket.h"
 #include <cmath>
@@ -66,7 +67,11 @@ private:
         size_t ring_size = ring.size();
 
         for (const auto& coord : ring) {
-            world_.getOrGenerateChunk(coord.first, coord.second, [self = shared_from_this(), completion_counter, ring_size](ChunkColumn* chunk) {
+            int priority = ChunkManager::calculatePriority(coord.first, coord.second,
+                                                          conn_->getPlayer()->getPosition().x / 16.0,
+                                                          conn_->getPlayer()->getPosition().z / 16.0);
+
+            world_.requestChunk(coord.first, coord.second, priority, [self = shared_from_this(), completion_counter, ring_size](ChunkColumn* chunk) {
                 if (chunk) {
                     auto packet = std::make_shared<ChunkDataPacket>(chunk);
 
