@@ -45,6 +45,8 @@ Server::Server(boost::asio::io_context& io_context)
       io_context_(io_context),
       tick_timer_(game_io_context_) {
     instance = this;
+    plugin_manager_ = std::make_unique<LuaPluginManager>(command_registry_);
+    plugin_manager_->start();
 
     std::cout << R"(               _   _               _
      /\       | | | |             (_)
@@ -109,6 +111,8 @@ Server::Server(boost::asio::io_context& io_context)
 void Server::stop() {
     LOG_INFO("Stopping server...");
 
+    world->syncSaveAllChunks();
+
     acceptor_.close();
 
     for (const auto& player : PlayerList::getInstance().getPlayers()) {
@@ -117,16 +121,19 @@ void Server::stop() {
         }
     }
 
-    io_context_.stop();
-    game_io_context_.stop();
-    console_io_context_.stop();
-
     if (game_work_) {
         game_work_->reset();
     }
     if (console_work_) {
         console_work_->reset();
     }
+    plugin_manager_->emit_server_stop();
+    plugin_manager_->unload_all();
+    plugin_manager_->stop();
+
+    io_context_.stop();
+    game_io_context_.stop();
+    console_io_context_.stop();
     LOG_INFO("Server stopped.");
 }
 
@@ -144,11 +151,17 @@ void Server::start_systems() {
     console_work_ = std::make_unique<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>(
         boost::asio::make_work_guard(console_io_context_));
 
-    game_thread_ = std::thread([this]() { game_io_context_.run(); });
+    game_thread_ = std::thread([this]() {
+        game_thread_id_ = std::this_thread::get_id();
+        game_io_context_.run();
+    });
     console_thread_ = std::thread([this]() { console_io_context_.run(); });
 
     start_console();
     start_tick_system();
+
+    plugin_manager_->load_all();
+    plugin_manager_->emit_server_start();
 }
 
 void Server::wait_for_systems() {
@@ -166,6 +179,10 @@ Server& Server::get_instance() {
 
 CommandRegistry& Server::get_command_registry() {
     return command_registry_;
+}
+
+IPluginManager& Server::get_plugin_manager() {
+    return *plugin_manager_;
 }
 
 toml::table& Server::get_config() {
@@ -194,6 +211,10 @@ boost::asio::io_context& Server::get_game_io_context() {
 
 void Server::post_game_task(std::function<void()> task) {
     boost::asio::post(game_io_context_, std::move(task));
+}
+
+bool Server::is_game_thread() const {
+    return std::this_thread::get_id() == game_thread_id_;
 }
 
 std::vector<uint8_t>& Server::get_public_key() const {
@@ -324,9 +345,15 @@ void Server::handle_accept(const std::shared_ptr<Connection> &new_connection, co
         new_connection->socket().set_option(boost::asio::ip::tcp::no_delay(true), ec);
         new_connection->start();
     } else {
+        if (error == boost::asio::error::operation_aborted ||
+            error == boost::asio::error::bad_descriptor) {
+            return;
+        }
         LOG_ERROR("Accept error: " + error.message());
     }
-    start_accept();
+    if (acceptor_.is_open()) {
+        start_accept();
+    }
 }
 
 void Server::start_tick_system() {
@@ -341,4 +368,16 @@ void Server::start_tick_system() {
 
 void Server::tick() {
     world->tick();
+    plugin_manager_->tick();
+
+    const auto& players = PlayerList::getInstance().getPlayers();
+    if (!players.empty()) {
+        const auto now = std::chrono::steady_clock::now();
+        if (now - last_autosave_ >= std::chrono::minutes(10)) {
+            world->syncSaveDirtyChunks();
+            last_autosave_ = now;
+        }
+    } else {
+        last_autosave_ = std::chrono::steady_clock::now();
+    }
 }

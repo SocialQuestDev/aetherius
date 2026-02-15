@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <mutex>
 #include <functional>
+#include <unordered_set>
 #include "game/world/Chunk.h"
 #include "game/world/WorldGenerator.h"
 #include "game/world/WorldStorage.h"
@@ -28,6 +29,7 @@ public:
     void setBlock(const Vector3& position, int blockId);
 
     void syncSaveAllChunks();
+    void syncSaveDirtyChunks();
     void asyncSaveChunk(const ChunkColumn& chunk);
     void unloadInactiveChunks();
     void updateChunkStatuses();
@@ -40,9 +42,20 @@ public:
     ChunkManager& getChunkManager() { return *chunk_manager_; }
 
 private:
+    struct ChunkCoordHash {
+        std::size_t operator()(const std::pair<int, int>& coord) const noexcept {
+            return (static_cast<std::size_t>(coord.first) << 32) ^
+                   static_cast<std::size_t>(coord.second);
+        }
+    };
+
+    void markChunkDirty(int x, int z);
+
     std::unique_ptr<WorldGenerator> generator;
     std::unique_ptr<WorldStorage> storage;
     std::unique_ptr<ChunkManager> chunk_manager_;
+    std::unordered_set<std::pair<int, int>, ChunkCoordHash> dirty_chunks_;
+    std::mutex dirty_mutex_;
 
     int64_t worldAge = 0;
     int64_t timeOfDay = 0;

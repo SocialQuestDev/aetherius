@@ -12,6 +12,14 @@ void CommandRegistry::registerConsoleCommand(std::unique_ptr<ConsoleCommand> com
     consoleCommands[command->getName()] = std::move(command);
 }
 
+bool CommandRegistry::hasGameCommand(const std::string& name) const {
+    return gameCommands.find(name) != gameCommands.end();
+}
+
+void CommandRegistry::unregisterGameCommand(const std::string& name) {
+    gameCommands.erase(name);
+}
+
 void CommandRegistry::executeCommand(std::shared_ptr<Player> player, const std::string& message) {
     std::string command_text = message;
     if (player && !message.empty() && message[0] == '/') {

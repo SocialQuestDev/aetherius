@@ -7,12 +7,15 @@
 #include <thread>
 #include <atomic>
 #include <functional>
+#include <chrono>
 #include "network/Connection.h"
 #include "network/PacketRegistry.h"
 #include "game/world/World.h"
 #include "crypto/RSA.h"
 #include "commands/CommandRegistry.h"
 #include "console/ConsoleManager.h"
+#include "plugins/IPluginManager.h"
+#include "plugins/LuaPluginManager.h"
 
 using boost::asio::ip::tcp;
 
@@ -30,9 +33,11 @@ public:
     World& get_world();
     PacketRegistry& get_packet_registry();
     CommandRegistry& get_command_registry();
+    IPluginManager& get_plugin_manager();
     boost::asio::io_context& get_io_context();
     boost::asio::io_context& get_game_io_context();
     void post_game_task(std::function<void()> task);
+    bool is_game_thread() const;
     void start_console();
     void async_init();
     void start_tick_system();
@@ -55,6 +60,7 @@ private:
     std::unique_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> console_work_;
     std::thread game_thread_;
     std::thread console_thread_;
+    std::thread::id game_thread_id_{};
     std::atomic<bool> systems_started_{false};
     toml::table config;
     static Server* instance;
@@ -63,8 +69,10 @@ private:
     std::unique_ptr<World> world;
     PacketRegistry packet_registry_;
     CommandRegistry command_registry_;
+    std::unique_ptr<IPluginManager> plugin_manager_;
     bool rsa_initialized_ = false;
     std::mutex rsa_mutex_;
 
     boost::asio::steady_timer tick_timer_;
+    std::chrono::steady_clock::time_point last_autosave_ = std::chrono::steady_clock::now();
 };

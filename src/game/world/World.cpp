@@ -34,13 +34,32 @@ void World::flushCompletedChunks() {
 
 void World::asyncSaveChunk(const ChunkColumn& chunk) {
     // Save is now handled by ChunkManager during generation
-    // For runtime saves (e.g., block changes), do immediate save
-    storage->saveChunkData(chunk.getX(), chunk.getZ(), chunk.serializeForFile());
+    // For runtime saves (e.g., block changes), mark dirty and defer to autosave
+    markChunkDirty(chunk.getX(), chunk.getZ());
 }
 
 void World::syncSaveAllChunks() {
     auto chunks = chunk_manager_->getAllChunks();
     for (ChunkColumn* chunk : chunks) {
+        if (chunk) {
+            storage->saveChunkData(chunk->getX(), chunk->getZ(), chunk->serializeForFile());
+        }
+    }
+
+    std::lock_guard<std::mutex> lock(dirty_mutex_);
+    dirty_chunks_.clear();
+}
+
+void World::syncSaveDirtyChunks() {
+    std::vector<std::pair<int, int>> dirty;
+    {
+        std::lock_guard<std::mutex> lock(dirty_mutex_);
+        dirty.assign(dirty_chunks_.begin(), dirty_chunks_.end());
+        dirty_chunks_.clear();
+    }
+
+    for (const auto& coord : dirty) {
+        ChunkColumn* chunk = chunk_manager_->getChunk(coord.first, coord.second);
         if (chunk) {
             storage->saveChunkData(chunk->getX(), chunk->getZ(), chunk->serializeForFile());
         }
@@ -109,12 +128,28 @@ void World::unloadInactiveChunks() {
         for (const auto& pos : to_unload_coords) {
             auto chunk_to_save = chunk_manager_->removeChunk(pos.first, pos.second);
             if (chunk_to_save) {
-                storage->saveChunkData(chunk_to_save->getX(), chunk_to_save->getZ(),
-                                      chunk_to_save->serializeForFile());
+                bool should_save = false;
+                {
+                    std::lock_guard<std::mutex> lock(dirty_mutex_);
+                    auto it = dirty_chunks_.find(pos);
+                    if (it != dirty_chunks_.end()) {
+                        dirty_chunks_.erase(it);
+                        should_save = true;
+                    }
+                }
+                if (should_save) {
+                    storage->saveChunkData(chunk_to_save->getX(), chunk_to_save->getZ(),
+                                          chunk_to_save->serializeForFile());
+                }
             }
         }
         LOG_DEBUG("Unloaded " + std::to_string(to_unload_coords.size()) + " inactive chunks.");
     }
+}
+
+void World::markChunkDirty(int x, int z) {
+    std::lock_guard<std::mutex> lock(dirty_mutex_);
+    dirty_chunks_.emplace(x, z);
 }
 
 int World::getBlock(const Vector3& position) {

@@ -11,14 +11,20 @@ void GetChatMessagePacket::handle(Connection &connection) {
         auto player = self->getPlayer();
         if (!player) return;
 
-        LOG_INFO(player->getNickname() + ": " + msg);
+        std::string filtered_msg = msg;
+        PluginPlayer snapshot{player->getId(), player->getNickname()};
+        if (!Server::get_instance().get_plugin_manager().emit_player_chat(snapshot, filtered_msg)) {
+            return;
+        }
 
-        if (!msg.empty() && msg[0] == '/') {
-            Server::get_instance().get_command_registry().executeCommand(player, msg);
+        LOG_INFO(player->getNickname() + ": " + filtered_msg);
+
+        if (!filtered_msg.empty() && filtered_msg[0] == '/') {
+            Server::get_instance().get_command_registry().executeCommand(player, filtered_msg);
         }
         else {
             for (const auto& p : PlayerList::getInstance().getPlayers()) {
-                p->sendChatMessage(player->getNickname() + ": " + msg, ChatColor::WHITE, player->getUuid());
+                p->sendChatMessage(player->getNickname() + ": " + filtered_msg, ChatColor::WHITE, player->getUuid());
             }
         }
     });

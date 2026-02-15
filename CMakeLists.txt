@@ -11,11 +11,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(magic_enum)
 
+FetchContent_Declare(
+  sol2
+  GIT_REPOSITORY https://github.com/ThePhD/sol2.git
+  GIT_TAG v3.5.0
+)
+FetchContent_MakeAvailable(sol2)
+
 set(Boost_USE_STATIC_LIBS OFF)
 set(Boost_USE_MULTITHREADED ON)
 set(Boost_USE_STATIC_RUNTIME OFF)
 
 find_package(Boost 1.71 REQUIRED CONFIG)
+add_subdirectory(external/lua)
 
 if(Boost_FOUND)
     include_directories(${Boost_INCLUDE_DIRS})
@@ -46,3 +54,20 @@ find_package(ZLIB REQUIRED)
 target_link_libraries(Aetherius PRIVATE ZLIB::ZLIB)
 
 target_link_libraries(Aetherius PRIVATE magic_enum::magic_enum)
+
+if (TARGET sol2::sol2)
+    target_link_libraries(Aetherius PRIVATE sol2::sol2)
+elseif(TARGET sol2)
+    target_link_libraries(Aetherius PRIVATE sol2)
+endif()
+
+target_link_libraries(Aetherius PRIVATE lua::lib)
+
+add_custom_command(
+        TARGET Aetherius  # Tie the command to the "MyApp" target
+        POST_BUILD    # Run after the target is built
+        COMMAND ${CMAKE_COMMAND} -E copy_directory  # CMake's cross-platform copy command
+        ${CMAKE_SOURCE_DIR}/plugins/               # Source directory
+        ${CMAKE_CURRENT_BINARY_DIR}/plugins/       # Destination directory
+        COMMENT "Copying config files to build directory"  # Optional: Log message
+)

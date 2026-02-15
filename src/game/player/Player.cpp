@@ -15,6 +15,7 @@
 #include "network/packet/outbound/play/EntityMetadataPacket.h"
 #include "game/player/PlayerData.h"
 #include "network/packet/outbound/play/DisconnectPacketPlay.h"
+#include "Server.h"
 #include <algorithm>
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
@@ -186,7 +187,12 @@ void Player::disconnect(std::string reason) const {
         return;
     }
 
+    PluginPlayer snapshot{getId(), nickname};
     PlayerList::getInstance().removePlayer(getId());
+    Server::get_instance().get_plugin_manager().emit_player_leave(snapshot, reason);
+    if (PlayerList::getInstance().getPlayers().empty()) {
+        Server::get_instance().get_world().syncSaveAllChunks();
+    }
 
     const auto& remainingPlayers = PlayerList::getInstance().getPlayers();
 
