@@ -16,32 +16,33 @@ void ChunkDataPacket::write(PacketBuffer& buffer) {
     }
     buffer.writeVarInt(primaryBitmask);
 
-    NbtBuilder heightmapNbt;
-    heightmapNbt.startCompound();
-    {
-        heightmapNbt.startCompound("MOTION_BLOCKING");
-        std::vector<int64_t> motion_blocking(37, 0);
-        heightmapNbt.writeLongArray("MOTION_BLOCKING", motion_blocking);
-        heightmapNbt.endCompound();
-    }
-    heightmapNbt.endCompound();
-
-    buffer.writeNbt(heightmapNbt.buffer);
-
-    buffer.writeVarInt(1024);
-    for (int i = 0; i < 1024; ++i) {
-        buffer.writeVarInt(1);
-    }
-
-    PacketBuffer chunkDataBuffer;
-    for (int i = 0; i < 16; ++i) {
-        if ((primaryBitmask >> i) & 1) {
-            chunk_->getSection(i)->writeToNetwork(chunkDataBuffer);
+    // Static heightmap NBT to avoid rebuilding every time
+    static const std::vector<uint8_t> heightmap_nbt = []() {
+        NbtBuilder heightmapNbt;
+        heightmapNbt.startCompound();
+        {
+            heightmapNbt.startCompound("MOTION_BLOCKING");
+            std::vector<int64_t> motion_blocking(37, 0);
+            heightmapNbt.writeLongArray("MOTION_BLOCKING", motion_blocking);
+            heightmapNbt.endCompound();
         }
+        heightmapNbt.endCompound();
+        return heightmapNbt.buffer;
+    }();
+
+    buffer.writeNbt(heightmap_nbt);
+
+    // Static biome data to avoid rebuilding every time
+    buffer.writeVarInt(1024);
+    static const std::vector<int> biome_data(1024, 1);
+    for (int biome : biome_data) {
+        buffer.writeVarInt(biome);
     }
 
-    buffer.writeVarInt(chunkDataBuffer.data.size());
-    buffer.data.insert(buffer.data.end(), chunkDataBuffer.data.begin(), chunkDataBuffer.data.end());
+    // Use cached chunk data
+    auto cachedData = chunk_->getCachedNetworkData();
+    buffer.writeVarInt(cachedData.size());
+    buffer.data.insert(buffer.data.end(), cachedData.begin(), cachedData.end());
 
     buffer.writeVarInt(0);
 }

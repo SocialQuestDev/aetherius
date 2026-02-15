@@ -124,6 +124,12 @@ public:
      */
     void shutdown();
 
+    // Debug/metrics helpers
+    size_t getLoadedCount() const;
+    size_t getPendingCount() const;
+    size_t getCompletedCount() const;
+    size_t getQueuedCount() const;
+
 private:
     void workerThread();
     void loadOrGenerateChunk(const ChunkCoord& coord, std::function<void(ChunkColumn*)> callback);
@@ -134,7 +140,7 @@ private:
 
     // Task queue
     std::priority_queue<ChunkLoadTask> task_queue_;
-    std::mutex queue_mutex_;
+    mutable std::mutex queue_mutex_;
     std::condition_variable queue_cv_;
 
     // Pending chunks (being loaded)
@@ -143,7 +149,7 @@ private:
 
     // Completed chunks (ready for main thread processing)
     std::vector<CompletedChunkTask> completed_chunks_;
-    std::mutex completed_mutex_;
+    mutable std::mutex completed_mutex_;
 
     // Worker threads
     std::vector<std::thread> workers_;

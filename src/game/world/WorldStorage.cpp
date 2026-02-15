@@ -39,5 +39,9 @@ void WorldStorage::saveChunkData(int x, int z, const std::vector<uint8_t>& data)
     int regionX = x >> 5;
     int regionZ = z >> 5;
     RegionFile* region = getRegionFile(regionX, regionZ);
+    if (data.empty()) {
+        region->deleteChunkData(x & 31, z & 31);
+        return;
+    }
     region->saveChunkData(x & 31, z & 31, data);
 }

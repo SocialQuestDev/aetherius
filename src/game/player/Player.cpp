@@ -15,6 +15,7 @@
 #include "network/packet/outbound/play/EntityMetadataPacket.h"
 #include "game/player/PlayerData.h"
 #include "network/packet/outbound/play/DisconnectPacketPlay.h"
+#include <algorithm>
 
 Player::Player(int id, UUID uuid, std::string nickname, std::string skin, std::shared_ptr<Connection> connection)
     : id(id), uuid(uuid), nickname(std::move(nickname)), skin(std::move(skin)), connection(connection),
@@ -100,7 +101,10 @@ void Player::setInventorySlot(int slot, const Slot& item) {
     }
 }
 void Player::setFlying(bool flying) { this->flying = flying; }
-void Player::setViewDistance(uint8_t viewDistance) { this->viewDistance = viewDistance; }
+void Player::setViewDistance(uint8_t viewDistance) {
+    const uint8_t maxViewDistance = 10;
+    this->viewDistance = std::min(viewDistance, maxViewDistance);
+}
 void Player::setSneaking(bool sneaking) { this->sneaking = sneaking; }
 void Player::setSprinting(bool sprinting) { this->sprinting = sprinting; }
 void Player::setLocale(const std::string& locale) { this->locale = locale; }

@@ -21,6 +21,7 @@
 #include "network/packet/outbound/play/EntityEquipmentPacket.h"
 #include "network/packet/outbound/play/ChunkDataPacket.h"
 #include "network/Metadata.h"
+#include "game/nbt/NbtBuilder.h"
 
 #include <toml++/toml.hpp>
 #include <nlohmann/json.hpp>
@@ -124,7 +125,13 @@ void Connection::do_read() {
                 do_read();
             } else {
                 keep_alive_timer_.cancel();
-                if (player) player->disconnect();
+                if (player) {
+                    Server::get_instance().post_game_task([self]() {
+                        if (self->getPlayer()) {
+                            self->getPlayer()->disconnect();
+                        }
+                    });
+                }
                 LOG_DEBUG("Connection closed: " + ec.message());
             }
         });
@@ -189,6 +196,9 @@ void Connection::process_incoming_buffer() {
 
             PacketBuffer packetReader(payload);
             int packetID = packetReader.readVarInt();
+            if (state_ == State::PLAY && packetID == 0x10) {
+                LOG_DEBUG("Inbound packet 0x10 (KeepAlive) received");
+            }
             auto packet = server.get_packet_registry().createPacket(state_, packetID);
             
             if (packet) {
@@ -202,7 +212,13 @@ void Connection::process_incoming_buffer() {
     } catch (const std::exception& e) {
         LOG_ERROR("Buffer processing error: " + std::string(e.what()));
         keep_alive_timer_.cancel();
-        if (player) player->disconnect();
+        if (player) {
+            Server::get_instance().post_game_task([self = shared_from_this()]() {
+                if (self->getPlayer()) {
+                    self->getPlayer()->disconnect();
+                }
+            });
+        }
     }
 }
 
@@ -214,7 +230,12 @@ void Connection::start_keep_alive_timer() {
             if (waiting_for_keep_alive_) {
                 DisconnectPacketPlay disconnect("Timed out!");
                 send_packet(disconnect);
-                player->disconnect();
+                LOG_WARN("KeepAlive timeout for " + self->get_nickname());
+                Server::get_instance().post_game_task([self]() {
+                    if (self->getPlayer()) {
+                        self->getPlayer()->disconnect();
+                    }
+                });
                 return;
             }
             send_keep_alive();
@@ -228,6 +249,7 @@ void Connection::send_keep_alive() {
     last_keep_alive_sent_ = std::chrono::steady_clock::now();
     waiting_for_keep_alive_ = true;
     KeepAlivePacketClientbound ka(last_keep_alive_id_);
+    LOG_DEBUG("Send KeepAlive id=" + std::to_string(last_keep_alive_id_));
     send_packet(ka);
 }
 
@@ -236,6 +258,10 @@ void Connection::handle_keep_alive(uint64_t id) {
         waiting_for_keep_alive_ = false;
         auto now = std::chrono::steady_clock::now();
         ping_ms_ = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_keep_alive_sent_).count();
+        LOG_DEBUG("Recv KeepAlive id=" + std::to_string(id) + " ping=" + std::to_string(ping_ms_) + "ms");
+    } else {
+        LOG_DEBUG("Recv KeepAlive mismatched id=" + std::to_string(id) +
+                  " expected=" + std::to_string(last_keep_alive_id_));
     }
 }
 
@@ -267,7 +293,7 @@ void Connection::send_join_game() {
     TimeUpdatePacket timePacket(world.getWorldAge(), world.getTimeOfDay());
     send_packet(timePacket);
 
-    boost::asio::post(Server::get_instance().get_io_context(), [self = shared_from_this()]() {
+    Server::get_instance().post_game_task([self = shared_from_this()]() {
         self->broadcast_player_join();
     });
 }
@@ -371,7 +397,13 @@ void Connection::do_write() {
                 } else {
                     writing_ = false;
                     keep_alive_timer_.cancel();
-                    if (player) player->disconnect();
+                    if (player) {
+                        Server::get_instance().post_game_task([self]() {
+                            if (self->getPlayer()) {
+                                self->getPlayer()->disconnect();
+                            }
+                        });
+                    }
                 }
             }));
 }
@@ -381,11 +413,18 @@ void Connection::send_light_data(int chunkX, int chunkZ) {}
 void Connection::update_chunks() {
     if (!player) return;
 
+    Server& server = Server::get_instance();
+    World& world = server.get_world();
+
+    // CRITICAL: Process completed chunks FIRST to make them available
+    world.flushCompletedChunks();
+
     Vector3 pos = player->getPosition();
     int chunkX = static_cast<int>(std::floor(pos.x / 16.0));
     int chunkZ = static_cast<int>(std::floor(pos.z / 16.0));
 
     if (chunkX == last_chunk_x_ && chunkZ == last_chunk_z_) {
+        // Still process completed chunks even if not moving
         return;
     }
 
@@ -395,9 +434,11 @@ void Connection::update_chunks() {
     vp.writeVarInt(chunkZ);
     send_packet(vp);
 
-    Server& server = Server::get_instance();
-    World& world = server.get_world();
     int viewDistance = player->getViewDistance();
+    const int MAX_VIEW_DISTANCE = 10;
+    if (viewDistance > MAX_VIEW_DISTANCE) {
+        viewDistance = MAX_VIEW_DISTANCE;
+    }
 
     // Clean up chunks that left view distance
     std::vector<std::pair<int, int>> to_remove;
@@ -437,53 +478,201 @@ void Connection::update_chunks() {
     std::sort(chunks_to_load.begin(), chunks_to_load.end(),
         [](const auto& a, const auto& b) { return std::get<2>(a) < std::get<2>(b); });
 
-    // Two-pass approach: send ALL loaded chunks first, then request new ones
-    // Loaded chunks are fast to serialize/send, so no strict limit
-    const size_t MAX_NEW_CHUNK_REQUESTS = 200;  // Limit only NEW chunk requests
+    // Throttle chunk sending to avoid client timeouts
+    const size_t BATCH_SIZE = 32;
+    const size_t MAX_NEW_CHUNK_REQUESTS = 128;
 
     int sent_immediately = 0;
     int requested = 0;
 
-    // Pass 1: Send ALL already-loaded chunks (fast)
+    // Pass 1: Send ALL already-loaded chunks in large batches (ULTRA FAST)
+    std::vector<std::vector<uint8_t>> batch_raw;
+    batch_raw.reserve(BATCH_SIZE);
+
+    // Static data shared across all chunks
+    static const std::vector<uint8_t> heightmap_nbt = []() {
+        NbtBuilder heightmapNbt;
+        heightmapNbt.startCompound();
+        heightmapNbt.startCompound("MOTION_BLOCKING");
+        std::vector<int64_t> motion_blocking(37, 0);
+        heightmapNbt.writeLongArray("MOTION_BLOCKING", motion_blocking);
+        heightmapNbt.endCompound();
+        heightmapNbt.endCompound();
+        return heightmapNbt.buffer;
+    }();
+
     for (const auto& [cx, cz, priority] : chunks_to_load) {
         if (auto* chunk = world.getChunk(cx, cz)) {
-            // Serialize packet to buffer immediately while chunk pointer is valid
-            ChunkDataPacket packet(chunk);
-            auto buffer = std::make_shared<PacketBuffer>();
-            packet.write(*buffer);
+            // Ultra-fast serialization using pre-cached data
+            PacketBuffer buffer;
+            buffer.writeVarInt(0x20);
+            buffer.writeInt(cx);
+            buffer.writeInt(cz);
+            buffer.writeBoolean(true);
 
-            boost::asio::post(write_strand_, [this, self = shared_from_this(), buffer, cx, cz]() {
-                if (socket_.is_open()) {
-                    send_packet(*buffer);
-                    std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
-                    sent_chunks_.insert({cx, cz});
+            int primaryBitmask = 0;
+            for (int i = 0; i < 16; ++i) {
+                if (chunk->getSection(i) != nullptr && !chunk->getSection(i)->isEmpty()) {
+                    primaryBitmask |= (1 << i);
                 }
-            });
+            }
+            buffer.writeVarInt(primaryBitmask);
+
+            buffer.writeNbt(heightmap_nbt);
+
+            // Optimized biome writing
+            buffer.writeVarInt(1024);
+            for (int i = 0; i < 1024; ++i) {
+                buffer.writeVarInt(1);
+            }
+
+            // Use pre-cached chunk section data
+            auto cachedData = chunk->getCachedNetworkData();
+            buffer.writeVarInt(cachedData.size());
+            buffer.data.insert(buffer.data.end(), cachedData.begin(), cachedData.end());
+            buffer.writeVarInt(0);
+
+            // Finalize immediately
+            int th = Server::get_instance().get_config()["server"]["compression_threshold"].value_or(256);
+            batch_raw.push_back(buffer.finalize(compression_enabled, th, crypto_state.get()));
+
+            {
+                std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
+                sent_chunks_.insert({cx, cz});
+            }
+
             sent_immediately++;
+
+            // Send large batch when full
+            if (batch_raw.size() >= BATCH_SIZE) {
+                auto batch_copy = std::make_shared<std::vector<std::vector<uint8_t>>>(std::move(batch_raw));
+                batch_raw.clear();
+                batch_raw.reserve(BATCH_SIZE);
+
+                boost::asio::post(write_strand_, [this, self = shared_from_this(), batch_copy]() {
+                    if (socket_.is_open()) {
+                        for (const auto& data : *batch_copy) {
+                            write_queue_.push(std::make_shared<std::vector<uint8_t>>(data));
+                        }
+                        if (!writing_) {
+                            do_write();
+                        }
+                    }
+                });
+            }
         }
     }
 
-    // Pass 2: Request new chunks (limit to prevent overwhelming the system)
+    // Send remaining batch
+    if (!batch_raw.empty()) {
+        auto batch_copy = std::make_shared<std::vector<std::vector<uint8_t>>>(std::move(batch_raw));
+        boost::asio::post(write_strand_, [this, self = shared_from_this(), batch_copy]() {
+            if (socket_.is_open()) {
+                for (const auto& data : *batch_copy) {
+                    write_queue_.push(std::make_shared<std::vector<uint8_t>>(data));
+                }
+                if (!writing_) {
+                    do_write();
+                }
+            }
+        });
+    }
+
+    // Pass 2: Request massive number of chunks in parallel (with deduplication)
     for (const auto& [cx, cz, priority] : chunks_to_load) {
         if (requested >= MAX_NEW_CHUNK_REQUESTS) break;
 
-        if (!world.getChunk(cx, cz)) {  // Only if not already sent
-            // Not loaded - request async loading
-            world.requestChunk(cx, cz, priority, [this, self = shared_from_this(), cx, cz](ChunkColumn* chunk) {
-                if (socket_.is_open() && chunk) {
-                    // Serialize to buffer immediately while chunk pointer is valid
-                    ChunkDataPacket packet(chunk);
-                    auto buffer = std::make_shared<PacketBuffer>();
-                    packet.write(*buffer);
-
-                    boost::asio::post(write_strand_, [this, self, buffer, cx, cz]() {
-                        if (socket_.is_open()) {
-                            send_packet(*buffer);
-                            std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
-                            sent_chunks_.insert({cx, cz});
-                        }
-                    });
+        if (!world.getChunk(cx, cz)) {
+            // Check if we already requested this chunk
+            bool already_pending = false;
+            {
+                std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+                if (pending_chunk_requests_.contains({cx, cz})) {
+                    already_pending = true;
+                } else {
+                    pending_chunk_requests_.insert({cx, cz});
                 }
+            }
+
+            if (already_pending) {
+                continue; // Skip duplicate request
+            }
+
+            LOG_DEBUG("Chunk " + std::to_string(cx) + "," + std::to_string(cz) +
+                      " not loaded, requesting generation/load");
+
+            world.requestChunk(cx, cz, priority, [this, self = shared_from_this(), cx, cz](ChunkColumn* chunk) {
+                // This callback runs in processCompletedChunks() - serialize immediately
+                // Remove from pending list
+                {
+                    std::lock_guard<std::mutex> lock(pending_requests_mutex_);
+                    pending_chunk_requests_.erase({cx, cz});
+                }
+
+                if (!socket_.is_open() || !chunk) return;
+
+                // Mark as sent IMMEDIATELY to prevent re-requests
+                {
+                    std::lock_guard<std::mutex> lock(sent_chunks_mutex_);
+                    sent_chunks_.insert({cx, cz});
+                }
+
+                LOG_DEBUG("Chunk " + std::to_string(cx) + "," + std::to_string(cz) +
+                          " ready, sending to client");
+
+                // Serialize immediately (network cache is already pre-computed)
+                PacketBuffer buffer;
+                buffer.writeVarInt(0x20);
+                buffer.writeInt(cx);
+                buffer.writeInt(cz);
+                buffer.writeBoolean(true);
+
+                int primaryBitmask = 0;
+                for (int i = 0; i < 16; ++i) {
+                    if (chunk->getSection(i) != nullptr && !chunk->getSection(i)->isEmpty()) {
+                        primaryBitmask |= (1 << i);
+                    }
+                }
+                buffer.writeVarInt(primaryBitmask);
+
+                static const std::vector<uint8_t> heightmap_nbt = []() {
+                    NbtBuilder heightmapNbt;
+                    heightmapNbt.startCompound();
+                    heightmapNbt.startCompound("MOTION_BLOCKING");
+                    std::vector<int64_t> motion_blocking(37, 0);
+                    heightmapNbt.writeLongArray("MOTION_BLOCKING", motion_blocking);
+                    heightmapNbt.endCompound();
+                    heightmapNbt.endCompound();
+                    return heightmapNbt.buffer;
+                }();
+                buffer.writeNbt(heightmap_nbt);
+
+                buffer.writeVarInt(1024);
+                for (int i = 0; i < 1024; ++i) {
+                    buffer.writeVarInt(1);
+                }
+
+                // Pre-cached data is already computed in worker thread
+                auto cachedData = chunk->getCachedNetworkData();
+                buffer.writeVarInt(cachedData.size());
+                buffer.data.insert(buffer.data.end(), cachedData.begin(), cachedData.end());
+                buffer.writeVarInt(0);
+
+                // Finalize and queue for async write
+                int th = Server::get_instance().get_config()["server"]["compression_threshold"].value_or(256);
+                auto finalized = std::make_shared<std::vector<uint8_t>>(
+                    buffer.finalize(compression_enabled, th, crypto_state.get())
+                );
+
+                // Only the actual write goes to the strand
+                boost::asio::post(write_strand_, [this, self, finalized]() {
+                    if (socket_.is_open()) {
+                        write_queue_.push(finalized);
+                        if (!writing_) {
+                            do_write();
+                        }
+                    }
+                });
             });
             requested++;
         }
@@ -492,15 +681,15 @@ void Connection::update_chunks() {
     int total_needed = chunks_to_load.size();
     int deferred = total_needed - sent_immediately - requested;
 
-    // Process any chunks that finished loading
-    if (requested > 0) {
-        world.flushCompletedChunks();
-    }
-
     if (sent_immediately > 0 || requested > 0) {
+        ChunkManager& cm = world.getChunkManager();
         LOG_DEBUG("Chunks: " + std::to_string(sent_immediately) + " sent, " +
                   std::to_string(requested) + " requested (" +
-                  std::to_string(deferred) + " deferred)");
+                  std::to_string(deferred) + " deferred) | loaded=" +
+                  std::to_string(cm.getLoadedCount()) + " pending=" +
+                  std::to_string(cm.getPendingCount()) + " queued=" +
+                  std::to_string(cm.getQueuedCount()) + " completed=" +
+                  std::to_string(cm.getCompletedCount()));
     }
 
     last_chunk_x_ = chunkX;

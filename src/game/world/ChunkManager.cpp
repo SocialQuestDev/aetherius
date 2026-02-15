@@ -4,6 +4,7 @@
 #include "console/Logger.h"
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 
 ChunkManager::ChunkManager(WorldGenerator* generator, WorldStorage* storage, size_t num_threads)
     : generator_(generator),
@@ -17,10 +18,10 @@ ChunkManager::ChunkManager(WorldGenerator* generator, WorldStorage* storage, siz
         LOG_ERROR("ChunkManager: storage is null!");
     }
 
-    // Default to hardware concurrency if not specified
+    // Default to hardware concurrency * 2 for I/O bound tasks
     if (num_threads == 0) {
-        num_threads = std::thread::hardware_concurrency();
-        if (num_threads == 0) num_threads = 4;  // Fallback
+        num_threads = std::thread::hardware_concurrency() * 2;
+        if (num_threads == 0) num_threads = 8;  // Fallback - more aggressive
     }
 
     // Spawn worker threads
@@ -53,6 +54,26 @@ void ChunkManager::shutdown() {
 
     workers_.clear();
     LOG_DEBUG("ChunkManager shut down");
+}
+
+size_t ChunkManager::getLoadedCount() const {
+    std::lock_guard<std::mutex> lock(chunks_mutex_);
+    return loaded_chunks_.size();
+}
+
+size_t ChunkManager::getPendingCount() const {
+    std::lock_guard<std::mutex> lock(pending_mutex_);
+    return pending_chunks_.size();
+}
+
+size_t ChunkManager::getCompletedCount() const {
+    std::lock_guard<std::mutex> lock(completed_mutex_);
+    return completed_chunks_.size();
+}
+
+size_t ChunkManager::getQueuedCount() const {
+    std::lock_guard<std::mutex> lock(queue_mutex_);
+    return task_queue_.size();
 }
 
 ChunkColumn* ChunkManager::getChunk(int x, int z) {
@@ -118,16 +139,22 @@ int ChunkManager::processCompletedChunks() {
         if (task.chunk) {
             ChunkCoord coord(task.chunk->getX(), task.chunk->getZ());
 
+            // Pre-cache network data while not locked for better performance
+            task.chunk->getCachedNetworkData();
+            task.chunk->touch();
+
+            ChunkColumn* chunk_ptr = nullptr;
+
             // Insert into loaded chunks
             {
                 std::lock_guard<std::mutex> lock(chunks_mutex_);
-                task.chunk->touch();
+                chunk_ptr = task.chunk.get();
                 loaded_chunks_[coord] = std::move(task.chunk);
             }
 
-            // Invoke callback on main thread
-            if (task.callback) {
-                task.callback(loaded_chunks_[coord].get());
+            // Invoke callback (already has cached data)
+            if (task.callback && chunk_ptr) {
+                task.callback(chunk_ptr);
             }
 
             processed++;
@@ -220,6 +247,7 @@ void ChunkManager::workerThread() {
             }
         }
 
+        auto start_time = std::chrono::steady_clock::now();
         // Load or generate the chunk
         auto chunk = std::make_unique<ChunkColumn>(task.coord.x, task.coord.z);
 
@@ -234,19 +262,39 @@ void ChunkManager::workerThread() {
         }
 
         if (!loaded_from_disk && generator_) {
+            LOG_DEBUG("Generating chunk " + std::to_string(task.coord.x) + "," +
+                      std::to_string(task.coord.z));
             try {
                 generator_->generateChunk(*chunk);
 
-                // Save newly generated chunk to disk
+                // Async save - don't block worker thread
                 if (storage_) {
                     auto dataToSave = chunk->serializeForFile();
-                    storage_->saveChunkData(task.coord.x, task.coord.z, dataToSave);
+                    // Save in background without waiting
+                    std::thread([storage = storage_, x = task.coord.x, z = task.coord.z, data = std::move(dataToSave)]() {
+                        try {
+                            storage->saveChunkData(x, z, data);
+                        } catch (...) {}
+                    }).detach();
                 }
+                LOG_DEBUG("Generated chunk " + std::to_string(task.coord.x) + "," +
+                          std::to_string(task.coord.z));
             } catch (const std::exception& e) {
                 LOG_ERROR("Failed to generate chunk (" + std::to_string(task.coord.x) + ", " +
                          std::to_string(task.coord.z) + "): " + e.what());
             }
         }
+
+        auto end_time = std::chrono::steady_clock::now();
+        auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        if (elapsed_ms > 50) {
+            LOG_DEBUG("Chunk " + std::to_string(task.coord.x) + "," + std::to_string(task.coord.z) +
+                      " ready in " + std::to_string(elapsed_ms) + "ms" +
+                      (loaded_from_disk ? " (disk)" : " (gen)"));
+        }
+
+        // Pre-generate network cache in worker thread
+        chunk->getCachedNetworkData();
 
         // Add to completed queue for main thread processing
         // Combine all callbacks into one

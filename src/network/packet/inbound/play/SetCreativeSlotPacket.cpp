@@ -2,12 +2,18 @@
 #include "network/Connection.h"
 #include "game/player/Player.h"
 #include "network/PacketBuffer.h"
+#include "Server.h"
 
 void SetCreativeSlotPacket::handle(Connection& connection) {
-    auto player = connection.getPlayer();
-    if (player) {
-        player->setInventorySlot(slot, item);
-    }
+    auto self = connection.shared_from_this();
+    const short slot_index = slot;
+    const Slot item_copy = item;
+    Server::get_instance().post_game_task([self, slot_index, item_copy]() {
+        auto player = self->getPlayer();
+        if (player) {
+            player->setInventorySlot(slot_index, item_copy);
+        }
+    });
 }
 
 void SetCreativeSlotPacket::read(PacketBuffer& buffer) {

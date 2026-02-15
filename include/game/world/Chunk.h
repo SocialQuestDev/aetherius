@@ -6,6 +6,7 @@
 #include <map>
 #include <cmath>
 #include <chrono>
+#include <mutex>
 
 #include "game/nbt/NbtBuilder.h"
 #include "network/PacketBuffer.h"
@@ -48,4 +49,13 @@ public:
 
     std::vector<uint8_t> serializeForFile() const;
     void deserialize(const std::vector<uint8_t>& data);
+
+    // Network serialization cache
+    std::vector<uint8_t> getCachedNetworkData();
+    void invalidateNetworkCache();
+
+private:
+    mutable std::vector<uint8_t> network_cache_;
+    mutable bool network_cache_valid_ = false;
+    mutable std::mutex cache_mutex_;
 };

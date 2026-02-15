@@ -41,7 +41,9 @@ std::string get_random_splash() {
 }
 
 Server::Server(boost::asio::io_context& io_context)
-    : acceptor_(io_context), io_context_(io_context), tick_timer_(io_context) {
+    : acceptor_(io_context),
+      io_context_(io_context),
+      tick_timer_(game_io_context_) {
     instance = this;
 
     std::cout << R"(               _   _               _
@@ -96,7 +98,7 @@ Server::Server(boost::asio::io_context& io_context)
     register_all_packets(packet_registry_);
     register_all_commands(command_registry_);
 
-    console_manager_ = std::make_unique<ConsoleManager>(io_context_);
+    console_manager_ = std::make_unique<ConsoleManager>(console_io_context_);
 
     pre_generate_world();
 
@@ -116,11 +118,46 @@ void Server::stop() {
     }
 
     io_context_.stop();
+    game_io_context_.stop();
+    console_io_context_.stop();
+
+    if (game_work_) {
+        game_work_->reset();
+    }
+    if (console_work_) {
+        console_work_->reset();
+    }
     LOG_INFO("Server stopped.");
 }
 
 void Server::start_console() {
     console_manager_->start();
+}
+
+void Server::start_systems() {
+    if (systems_started_.exchange(true)) {
+        return;
+    }
+
+    game_work_ = std::make_unique<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>(
+        boost::asio::make_work_guard(game_io_context_));
+    console_work_ = std::make_unique<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>>(
+        boost::asio::make_work_guard(console_io_context_));
+
+    game_thread_ = std::thread([this]() { game_io_context_.run(); });
+    console_thread_ = std::thread([this]() { console_io_context_.run(); });
+
+    start_console();
+    start_tick_system();
+}
+
+void Server::wait_for_systems() {
+    if (game_thread_.joinable()) {
+        game_thread_.join();
+    }
+    if (console_thread_.joinable()) {
+        console_thread_.join();
+    }
 }
 
 Server& Server::get_instance() {
@@ -149,6 +186,14 @@ PacketRegistry& Server::get_packet_registry() {
 
 boost::asio::io_context& Server::get_io_context() {
     return io_context_;
+}
+
+boost::asio::io_context& Server::get_game_io_context() {
+    return game_io_context_;
+}
+
+void Server::post_game_task(std::function<void()> task) {
+    boost::asio::post(game_io_context_, std::move(task));
 }
 
 std::vector<uint8_t>& Server::get_public_key() const {

@@ -8,34 +8,39 @@
 #include "utils/MinecraftRegistry.hpp"
 
 void BlockDigRequestPacket::handle(Connection& connection) {
-    std::shared_ptr<Player> digger = connection.getPlayer();
-    if (!digger) {
-        return;
-    }
-
-    char destroyStage = -2;
-
-    switch (status) {
-        case 0:
-            destroyStage = 0;
-            break;
-        case 1:
-            destroyStage = -1;
-            break;
-        case 2:
-            destroyStage = 1;
-            break;
-    }
-
-    BlockDigResponsePacket packet(digger->getId(), this->position, destroyStage);
-    BlockChangePacket blockChangePacket(this->position, 0);
-    for (const auto& player : PlayerList::getInstance().getPlayers()) {
-        if (player->getId() != digger->getId()) {
-            player->getConnection()->send_packet(packet);
-            player->getConnection()->send_packet(blockChangePacket);
+    auto self = connection.shared_from_this();
+    const int dig_status = status;
+    const Vector3 dig_pos = position;
+    Server::get_instance().post_game_task([self, dig_status, dig_pos]() {
+        std::shared_ptr<Player> digger = self->getPlayer();
+        if (!digger) {
+            return;
         }
-    }
-    Server::get_instance().get_world().setBlock(this->position, 0);
+
+        char destroyStage = -2;
+
+        switch (dig_status) {
+            case 0:
+                destroyStage = 0;
+                break;
+            case 1:
+                destroyStage = -1;
+                break;
+            case 2:
+                destroyStage = 1;
+                break;
+        }
+
+        BlockDigResponsePacket packet(digger->getId(), dig_pos, destroyStage);
+        BlockChangePacket blockChangePacket(dig_pos, 0);
+        for (const auto& player : PlayerList::getInstance().getPlayers()) {
+            if (player->getId() != digger->getId()) {
+                player->getConnection()->send_packet(packet);
+                player->getConnection()->send_packet(blockChangePacket);
+            }
+        }
+        Server::get_instance().get_world().setBlock(dig_pos, 0);
+    });
 }
 
 void BlockDigRequestPacket::read(PacketBuffer& buffer) {

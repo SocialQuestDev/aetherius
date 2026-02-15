@@ -17,6 +17,7 @@ public:
 
     bool getChunkData(int chunkX, int chunkZ, std::vector<uint8_t>& data);
     void saveChunkData(int chunkX, int chunkZ, const std::vector<uint8_t>& data);
+    void deleteChunkData(int chunkX, int chunkZ);
 
 private:
     struct ChunkLocation {

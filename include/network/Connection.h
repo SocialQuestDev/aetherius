@@ -14,6 +14,7 @@
 #include <toml++/toml.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <chrono>
+#include <limits>
 
 using boost::asio::ip::tcp;
 
@@ -66,8 +67,8 @@ public:
 
     std::chrono::steady_clock::time_point last_keep_alive_sent_;
     int ping_ms_ = 0;
-    int last_chunk_x_ = 0;
-    int last_chunk_z_ = 0;
+    int last_chunk_x_ = std::numeric_limits<int>::min();
+    int last_chunk_z_ = std::numeric_limits<int>::min();
 
     struct PairHash {
         std::size_t operator()(const std::pair<int, int>& p) const {
@@ -75,7 +76,9 @@ public:
         }
     };
     std::unordered_set<std::pair<int, int>, PairHash> sent_chunks_;
+    std::unordered_set<std::pair<int, int>, PairHash> pending_chunk_requests_;
     std::mutex sent_chunks_mutex_;
+    std::mutex pending_requests_mutex_;
 
 private:
     explicit Connection(boost::asio::io_context& io_context);

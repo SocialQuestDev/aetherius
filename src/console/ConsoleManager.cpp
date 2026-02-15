@@ -26,7 +26,9 @@ void ConsoleManager::handle_read(const boost::system::error_code& error, std::si
             if (line.back() == '\r') {
                 line.pop_back();
             }
-            Server::get_instance().get_command_registry().executeCommand(nullptr, line);
+            Server::get_instance().post_game_task([line]() {
+                Server::get_instance().get_command_registry().executeCommand(nullptr, line);
+            });
         }
 
         do_read();

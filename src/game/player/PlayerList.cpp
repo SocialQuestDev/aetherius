@@ -11,6 +11,7 @@ PlayerList& PlayerList::getInstance() {
 }
 
 void PlayerList::addPlayer(std::shared_ptr<Player> newPlayer) {
+    std::lock_guard<std::mutex> lock(playersMutex);
     players.push_back(newPlayer);
 }
 

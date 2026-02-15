@@ -5,19 +5,23 @@
 #include "Server.h"
 
 void GetChatMessagePacket::handle(Connection &connection) {
-    auto player = connection.getPlayer();
-    if (!player) return;
+    auto self = connection.shared_from_this();
+    const std::string msg = message;
+    Server::get_instance().post_game_task([self, msg]() {
+        auto player = self->getPlayer();
+        if (!player) return;
 
-    LOG_INFO(player->getNickname() + ": " + message);
+        LOG_INFO(player->getNickname() + ": " + msg);
 
-    if (message[0] == '/') {
-        Server::get_instance().get_command_registry().executeCommand(player, message);
-    }
-    else {
-        for (const auto& p : PlayerList::getInstance().getPlayers()) {
-            p->sendChatMessage(player->getNickname() + ": " + message, ChatColor::WHITE, player->getUuid());
+        if (!msg.empty() && msg[0] == '/') {
+            Server::get_instance().get_command_registry().executeCommand(player, msg);
         }
-    }
+        else {
+            for (const auto& p : PlayerList::getInstance().getPlayers()) {
+                p->sendChatMessage(player->getNickname() + ": " + msg, ChatColor::WHITE, player->getUuid());
+            }
+        }
+    });
 }
 
 void GetChatMessagePacket::read(PacketBuffer &buffer) {
