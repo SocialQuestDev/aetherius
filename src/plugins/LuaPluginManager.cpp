@@ -10,6 +10,60 @@ namespace {
 std::string default_plugin_name(const std::filesystem::path& path) {
     return path.filename().string();
 }
+
+struct LuaCallsite {
+    std::string source;
+    int line = 0;
+};
+
+std::optional<LuaCallsite> get_lua_callsite(sol::this_state state) {
+    lua_State* lua_state = state;
+    lua_Debug ar;
+    // Stack level 1 is the Lua caller of the C++ log function.
+    if (lua_getstack(lua_state, 1, &ar) == 0) {
+        return std::nullopt;
+    }
+    lua_getinfo(lua_state, "Sl", &ar);
+    if (!ar.source) {
+        return std::nullopt;
+    }
+    return LuaCallsite{std::string(ar.source), ar.currentline};
+}
+
+std::string normalize_lua_source(std::string source) {
+    if (source.empty()) {
+        return "Lua";
+    }
+    if (source[0] == '@' || source[0] == '=') {
+        source.erase(0, 1);
+    }
+    if (source.empty()) {
+        return "Lua";
+    }
+
+    std::filesystem::path source_path(source);
+    if (source_path.is_absolute()) {
+        std::error_code ec;
+        std::filesystem::path relative = std::filesystem::relative(
+            source_path, std::filesystem::current_path(), ec);
+        if (!ec && !relative.empty()) {
+            return relative.string();
+        }
+    }
+    return source_path.string();
+}
+
+std::string format_lua_log_prefix(sol::this_state state) {
+    auto callsite = get_lua_callsite(state);
+    if (!callsite.has_value()) {
+        return "[Lua] ";
+    }
+    const std::string source = normalize_lua_source(callsite->source);
+    if (callsite->line > 0) {
+        return "[" + source + ":" + std::to_string(callsite->line) + "] ";
+    }
+    return "[" + source + ":?] ";
+}
 }
 
 LuaPluginManager::LuaPluginManager(CommandRegistry& command_registry)
@@ -42,23 +96,7 @@ void LuaPluginManager::stop() {
 
 void LuaPluginManager::load_all() {
     enqueue_task([this]() {
-        if (!std::filesystem::exists(plugins_dir_)) {
-            std::filesystem::create_directories(plugins_dir_);
-        }
-
-        std::vector<std::filesystem::path> plugin_dirs;
-        for (const auto& entry : std::filesystem::directory_iterator(plugins_dir_)) {
-            if (!entry.is_directory()) {
-                continue;
-            }
-            const auto init_path = entry.path() / "init.lua";
-            if (std::filesystem::exists(init_path)) {
-                plugin_dirs.push_back(entry.path());
-            }
-        }
-
-        std::sort(plugin_dirs.begin(), plugin_dirs.end());
-        for (const auto& plugin_dir : plugin_dirs) {
+        for (const auto& plugin_dir : collect_plugin_dirs()) {
             load_plugin(plugin_dir);
         }
     });
@@ -82,23 +120,7 @@ void LuaPluginManager::reload_all() {
         plugins_.clear();
         hooks_.clear();
 
-        if (!std::filesystem::exists(plugins_dir_)) {
-            std::filesystem::create_directories(plugins_dir_);
-        }
-
-        std::vector<std::filesystem::path> plugin_dirs;
-        for (const auto& entry : std::filesystem::directory_iterator(plugins_dir_)) {
-            if (!entry.is_directory()) {
-                continue;
-            }
-            const auto init_path = entry.path() / "init.lua";
-            if (std::filesystem::exists(init_path)) {
-                plugin_dirs.push_back(entry.path());
-            }
-        }
-
-        std::sort(plugin_dirs.begin(), plugin_dirs.end());
-        for (const auto& plugin_dir : plugin_dirs) {
+        for (const auto& plugin_dir : collect_plugin_dirs()) {
             load_plugin(plugin_dir);
         }
     });
@@ -118,106 +140,41 @@ void LuaPluginManager::tick() {
             }
         }
 
-        auto it = hooks_.find("tick");
-        if (it == hooks_.end()) {
-            return;
-        }
-
-        for (auto& hook : it->second) {
-            auto plugin_it = plugins_.find(hook.plugin_name);
-            LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
-            call_with_plugin(plugin, [&]() {
-                sol::protected_function_result result = hook.callback();
-                if (!result.valid()) {
-                    sol::error err = result;
-                    LOG_ERROR("Lua hook 'tick' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
-                }
-            });
-        }
+        dispatch_hooks("tick",
+            [](const LuaHook& hook) { return hook.callback(); },
+            "tick");
     });
 }
 
 void LuaPluginManager::emit_server_start() {
     enqueue_task([this]() {
-        auto it = hooks_.find("server_start");
-        if (it == hooks_.end()) {
-            return;
-        }
-
-        for (auto& hook : it->second) {
-            auto plugin_it = plugins_.find(hook.plugin_name);
-            LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
-            call_with_plugin(plugin, [&]() {
-                sol::protected_function_result result = hook.callback();
-                if (!result.valid()) {
-                    sol::error err = result;
-                    LOG_ERROR("Lua hook 'server_start' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
-                }
-            });
-        }
+        dispatch_hooks("server_start",
+            [](const LuaHook& hook) { return hook.callback(); },
+            "server_start");
     });
 }
 
 void LuaPluginManager::emit_server_stop() {
     enqueue_task([this]() {
-        auto it = hooks_.find("server_stop");
-        if (it == hooks_.end()) {
-            return;
-        }
-
-        for (auto& hook : it->second) {
-            auto plugin_it = plugins_.find(hook.plugin_name);
-            LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
-            call_with_plugin(plugin, [&]() {
-                sol::protected_function_result result = hook.callback();
-                if (!result.valid()) {
-                    sol::error err = result;
-                    LOG_ERROR("Lua hook 'server_stop' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
-                }
-            });
-        }
+        dispatch_hooks("server_stop",
+            [](const LuaHook& hook) { return hook.callback(); },
+            "server_stop");
     });
 }
 
 void LuaPluginManager::emit_player_join(const PluginPlayer& player) {
     enqueue_task([this, player]() {
-        auto it = hooks_.find("player_join");
-        if (it == hooks_.end()) {
-            return;
-        }
-
-        for (auto& hook : it->second) {
-            auto plugin_it = plugins_.find(hook.plugin_name);
-            LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
-            call_with_plugin(plugin, [&]() {
-                sol::protected_function_result result = hook.callback(player);
-                if (!result.valid()) {
-                    sol::error err = result;
-                    LOG_ERROR("Lua hook 'player_join' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
-                }
-            });
-        }
+        dispatch_hooks("player_join",
+            [&player](const LuaHook& hook) { return hook.callback(player); },
+            "player_join");
     });
 }
 
 void LuaPluginManager::emit_player_leave(const PluginPlayer& player, const std::string& reason) {
     enqueue_task([this, player, reason]() {
-        auto it = hooks_.find("player_leave");
-        if (it == hooks_.end()) {
-            return;
-        }
-
-        for (auto& hook : it->second) {
-            auto plugin_it = plugins_.find(hook.plugin_name);
-            LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
-            call_with_plugin(plugin, [&]() {
-                sol::protected_function_result result = hook.callback(player, reason);
-                if (!result.valid()) {
-                    sol::error err = result;
-                    LOG_ERROR("Lua hook 'player_leave' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
-                }
-            });
-        }
+        dispatch_hooks("player_leave",
+            [&player, &reason](const LuaHook& hook) { return hook.callback(player, reason); },
+            "player_leave");
     });
 }
 
@@ -232,33 +189,7 @@ bool LuaPluginManager::emit_player_chat(const PluginPlayer& player, std::string&
             return true;
         }
 
-        for (auto& hook : it->second) {
-            auto plugin_it = plugins_.find(hook.plugin_name);
-            LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
-            call_with_plugin(plugin, [&]() {
-                sol::protected_function_result result = hook.callback(player, message);
-                if (!result.valid()) {
-                    sol::error err = result;
-                    LOG_ERROR("Lua hook 'player_chat' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
-                    return;
-                }
-
-                const sol::type result_type = result.get_type();
-                if (result_type == sol::type::boolean) {
-                    if (!result.get<bool>()) {
-                        message.clear();
-                    }
-                } else if (result_type == sol::type::string) {
-                    message = result.get<std::string>();
-                }
-            });
-
-            if (message.empty()) {
-                return false;
-            }
-        }
-
-        return true;
+        return apply_player_chat_hooks(player, message);
     }
 
     auto done = std::make_shared<std::promise<std::optional<std::string>>>();
@@ -266,37 +197,12 @@ bool LuaPluginManager::emit_player_chat(const PluginPlayer& player, std::string&
     std::string message_copy = message;
 
     enqueue_task([this, player, message_copy, done]() mutable {
-        auto it = hooks_.find("player_chat");
-        if (it != hooks_.end()) {
-            std::string local_message = message_copy;
-            for (auto& hook : it->second) {
-                auto plugin_it = plugins_.find(hook.plugin_name);
-                LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
-                call_with_plugin(plugin, [&]() {
-                    sol::protected_function_result result = hook.callback(player, local_message);
-                    if (!result.valid()) {
-                        sol::error err = result;
-                        LOG_ERROR("Lua hook 'player_chat' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
-                        return;
-                    }
-
-                    const sol::type result_type = result.get_type();
-                    if (result_type == sol::type::boolean) {
-                        if (!result.get<bool>()) {
-                            local_message.clear();
-                        }
-                    } else if (result_type == sol::type::string) {
-                        local_message = result.get<std::string>();
-                    }
-                });
-
-                if (local_message.empty()) {
-                    done->set_value(std::nullopt);
-                    return;
-                }
-            }
-            message_copy = local_message;
+        std::string local_message = message_copy;
+        if (!apply_player_chat_hooks(player, local_message)) {
+            done->set_value(std::nullopt);
+            return;
         }
+        message_copy = local_message;
         done->set_value(message_copy);
     });
 
@@ -464,17 +370,17 @@ void LuaPluginManager::bind_api() {
     );
 
     sol::table log = lua_.create_table();
-    log.set_function("info", [](const std::string& message) {
-        LOG_INFO("[Lua] " + message);
+    log.set_function("info", [](sol::this_state state, const std::string& message) {
+        LOG_INFO(format_lua_log_prefix(state) + message);
     });
-    log.set_function("debug", [](const std::string& message) {
-        LOG_DEBUG("[Lua] " + message);
+    log.set_function("debug", [](sol::this_state state, const std::string& message) {
+        LOG_DEBUG(format_lua_log_prefix(state) + message);
     });
-    log.set_function("warn", [](const std::string& message) {
-        LOG_WARN("[Lua] " + message);
+    log.set_function("warn", [](sol::this_state state, const std::string& message) {
+        LOG_WARN(format_lua_log_prefix(state) + message);
     });
-    log.set_function("error", [](const std::string& message) {
-        LOG_ERROR("[Lua] " + message);
+    log.set_function("error", [](sol::this_state state, const std::string& message) {
+        LOG_ERROR(format_lua_log_prefix(state) + message);
     });
 
     sol::table api = lua_.create_table();
@@ -507,6 +413,41 @@ void LuaPluginManager::bind_api() {
         });
 
     lua_["aetherius"] = api;
+
+    // Replace base lua funcs
+    lua_.set_function("print", [](sol::this_state s, sol::variadic_args args) {
+        lua_State* L = s;
+        std::string message;
+
+        for (auto arg : args) {
+            // Безопасное получение строки из любого типа Lua
+            const char* s_ptr = luaL_tolstring(L, arg.stack_index(), nullptr);
+            if (s_ptr) {
+                message += s_ptr;
+                message += "\t"; // Стандартный print в Lua разделяет аргументы табами
+                lua_pop(L, 1);   // Чистим стек после luaL_tolstring
+            }
+        }
+
+        LOG_WARN(format_lua_log_prefix(s) + "Used deprecated function 'print'... Use aetherius.log");
+        if (!message.empty()) {
+            LOG_INFO(format_lua_log_prefix(s) + message);
+        }
+    });
+
+    // Block base lua funcs
+
+    lua_.set_function("require", [](sol::this_state s, const std::string& module) {
+        LOG_WARN(format_lua_log_prefix(s) + "Used blocked function 'require'... Use aetherius.include");
+    });
+
+    lua_.set_function("dofile", [](sol::this_state s, const std::string& module) {
+        LOG_WARN(format_lua_log_prefix(s) + "Used blocked function 'require'... Use aetherius.include");
+    });
+
+    lua_.set_function("include", [](sol::this_state s, const std::string& module) {
+        LOG_WARN(format_lua_log_prefix(s) + "Used blocked function 'require'... Use aetherius.include");
+    });
 }
 
 void LuaPluginManager::set_package_path_for_plugin(const std::filesystem::path& plugin_dir) {
@@ -581,6 +522,63 @@ void LuaPluginManager::remove_hook(const std::string& event, const std::string& 
         }), hooks.end());
 }
 
+void LuaPluginManager::dispatch_hooks(
+    const std::string& event,
+    const std::function<sol::protected_function_result(const LuaHook&)>& invoker,
+    const std::string& error_label) {
+    auto it = hooks_.find(event);
+    if (it == hooks_.end()) {
+        return;
+    }
+
+    for (auto& hook : it->second) {
+        auto plugin_it = plugins_.find(hook.plugin_name);
+        LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
+        call_with_plugin(plugin, [&]() {
+            sol::protected_function_result result = invoker(hook);
+            if (!result.valid()) {
+                sol::error err = result;
+                LOG_ERROR("Lua hook '" + error_label + "' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
+            }
+        });
+    }
+}
+
+bool LuaPluginManager::apply_player_chat_hooks(const PluginPlayer& player, std::string& message) {
+    auto it = hooks_.find("player_chat");
+    if (it == hooks_.end()) {
+        return true;
+    }
+
+    for (auto& hook : it->second) {
+        auto plugin_it = plugins_.find(hook.plugin_name);
+        LuaPlugin* plugin = plugin_it != plugins_.end() ? &plugin_it->second : nullptr;
+        call_with_plugin(plugin, [&]() {
+            sol::protected_function_result result = hook.callback(player, message);
+            if (!result.valid()) {
+                sol::error err = result;
+                LOG_ERROR("Lua hook 'player_chat' error in '" + hook.plugin_name + ":" + hook.hook_name + "': " + std::string(err.what()));
+                return;
+            }
+
+            const sol::type result_type = result.get_type();
+            if (result_type == sol::type::boolean) {
+                if (!result.get<bool>()) {
+                    message.clear();
+                }
+            } else if (result_type == sol::type::string) {
+                message = result.get<std::string>();
+            }
+        });
+
+        if (message.empty()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool LuaPluginManager::run_lua_file(const std::filesystem::path& path, const std::string& context) {
     sol::load_result chunk = lua_.load_file(path.string());
     if (!chunk.valid()) {
@@ -622,6 +620,26 @@ bool LuaPluginManager::resolve_plugin_path(const std::filesystem::path& plugin_d
 
     out_path = resolved;
     return true;
+}
+
+std::vector<std::filesystem::path> LuaPluginManager::collect_plugin_dirs() const {
+    if (!std::filesystem::exists(plugins_dir_)) {
+        std::filesystem::create_directories(plugins_dir_);
+    }
+
+    std::vector<std::filesystem::path> plugin_dirs;
+    for (const auto& entry : std::filesystem::directory_iterator(plugins_dir_)) {
+        if (!entry.is_directory()) {
+            continue;
+        }
+        const auto init_path = entry.path() / "init.lua";
+        if (std::filesystem::exists(init_path)) {
+            plugin_dirs.push_back(entry.path());
+        }
+    }
+
+    std::sort(plugin_dirs.begin(), plugin_dirs.end());
+    return plugin_dirs;
 }
 
 void LuaPluginManager::run_game_task(const std::function<void()>& task) {

@@ -63,11 +63,14 @@ endif()
 
 target_link_libraries(Aetherius PRIVATE lua::lib)
 
-add_custom_command(
-        TARGET Aetherius  # Tie the command to the "MyApp" target
-        POST_BUILD    # Run after the target is built
-        COMMAND ${CMAKE_COMMAND} -E copy_directory  # CMake's cross-platform copy command
-        ${CMAKE_SOURCE_DIR}/plugins/               # Source directory
-        ${CMAKE_CURRENT_BINARY_DIR}/plugins/       # Destination directory
-        COMMENT "Copying config files to build directory"  # Optional: Log message
+add_custom_target(UpdatePlugins
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_CURRENT_BINARY_DIR}/plugins/"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/plugins/"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/plugins/"
+        "${CMAKE_CURRENT_BINARY_DIR}/plugins/"
+        COMMENT "Forcing plugin sync: deleting old and copying fresh files..."
+        VERBATIM
 )
+
+add_dependencies(Aetherius UpdatePlugins)

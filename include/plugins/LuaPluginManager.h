@@ -68,10 +68,15 @@ private:
                        const std::string& name,
                        sol::protected_function callback);
     void remove_hook(const std::string& event, const std::string& name);
+    void dispatch_hooks(const std::string& event,
+                        const std::function<sol::protected_function_result(const LuaHook&)>& invoker,
+                        const std::string& error_label);
+    bool apply_player_chat_hooks(const PluginPlayer& player, std::string& message);
     bool run_lua_file(const std::filesystem::path& path, const std::string& context);
     bool resolve_plugin_path(const std::filesystem::path& plugin_dir,
                              const std::string& relative_path,
                              std::filesystem::path& out_path) const;
+    std::vector<std::filesystem::path> collect_plugin_dirs() const;
     void run_game_task(const std::function<void()>& task);
     void enqueue_task(std::function<void()> task);
     void run_loop();
