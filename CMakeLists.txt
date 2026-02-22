@@ -61,14 +61,47 @@ elseif(TARGET sol2)
     target_link_libraries(Aetherius PRIVATE sol2)
 endif()
 
+set(DOTNET_ROOT "/usr/share/dotnet")
+
+include_directories(
+        ${DOTNET_ROOT}/packs/Microsoft.NETCore.App.Host.linux-x64/10.0.3/runtimes/linux-x64/native
+)
+
+link_directories(
+        ${DOTNET_ROOT}/shared/Microsoft.NETCore.App/10.0.3
+)
+
+target_link_libraries(Aetherius PRIVATE
+        dl
+        pthread
+        hostfxr
+        /usr/share/dotnet/packs/Microsoft.NETCore.App.Host.linux-x64/10.0.3/runtimes/linux-x64/native/libnethost.so
+)
+
 target_link_libraries(Aetherius PRIVATE lua::lib)
 
+file(GLOB MANAGED_FILES "${CMAKE_SOURCE_DIR}/managed/*")
+
+add_custom_target(UpdateManaged
+        COMMAND ${CMAKE_COMMAND} -E echo "Copying managed files to build directory..."
+        COMMAND ${CMAKE_COMMAND} -E copy ${MANAGED_FILES} "${CMAKE_CURRENT_BINARY_DIR}/"
+        COMMENT "Updating managed assemblies in build folder"
+        VERBATIM
+)
+
 add_custom_target(UpdatePlugins
-        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_CURRENT_BINARY_DIR}/plugins/"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/plugins/"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_CURRENT_BINARY_DIR}/plugins_lua/"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/plugins_lua/"
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/plugins/"
-        "${CMAKE_CURRENT_BINARY_DIR}/plugins/"
+        "${CMAKE_SOURCE_DIR}/plugins_lua/"
+        "${CMAKE_CURRENT_BINARY_DIR}/plugins_lua/"
+
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${CMAKE_CURRENT_BINARY_DIR}/plugins_sharp/"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/plugins_sharp/"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/plugins_sharp/"
+        "${CMAKE_CURRENT_BINARY_DIR}/plugins_sharp/"
+
         COMMENT "Forcing plugin sync: deleting old and copying fresh files..."
         VERBATIM
 )

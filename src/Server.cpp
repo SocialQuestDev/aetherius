@@ -14,6 +14,7 @@
 #include "../include/utils/ConfigValidator.h"
 #include "game/world/WorldGenerator.h"
 #include "network/PacketRegistry.h"
+#include "plugins/SharpPluginManager.h"
 #include "commands/CommandRegistry.h"
 #include "network/packet/outbound/play/DisconnectPacketPlay.h"
 
@@ -45,7 +46,7 @@ Server::Server(boost::asio::io_context& io_context)
       io_context_(io_context),
       tick_timer_(game_io_context_) {
     instance = this;
-    plugin_manager_ = std::make_unique<LuaPluginManager>(command_registry_);
+    plugin_manager_ = std::make_unique<SharpPluginManager>(command_registry_);
     plugin_manager_->start();
 
     std::cout << R"(               _   _               _

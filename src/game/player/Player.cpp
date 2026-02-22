@@ -187,7 +187,7 @@ void Player::disconnect(std::string reason) const {
         return;
     }
 
-    PluginPlayer snapshot{getId(), nickname};
+    PluginPlayer snapshot{getId(), nickname.c_str(), nickname.length()};
     PlayerList::getInstance().removePlayer(getId());
     Server::get_instance().get_plugin_manager().emit_player_leave(snapshot, reason);
     if (PlayerList::getInstance().getPlayers().empty()) {

@@ -68,7 +68,7 @@ std::string format_lua_log_prefix(sol::this_state state) {
 
 LuaPluginManager::LuaPluginManager(CommandRegistry& command_registry)
     : command_registry_(command_registry),
-      plugins_dir_(std::filesystem::current_path() / "plugins") {
+      plugins_dir_(std::filesystem::current_path() / "plugins_lua") {
     lua_.open_libraries(sol::lib::base, sol::lib::package, sol::lib::math,
                         sol::lib::table, sol::lib::string, sol::lib::utf8);
 

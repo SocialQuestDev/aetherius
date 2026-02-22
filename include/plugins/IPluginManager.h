@@ -4,7 +4,8 @@
 
 struct PluginPlayer {
     int id = 0;
-    std::string name;
+    const char* name;
+    size_t name_length = 0;
 };
 
 class IPluginManager {

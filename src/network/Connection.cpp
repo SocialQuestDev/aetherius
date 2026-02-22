@@ -347,7 +347,8 @@ void Connection::broadcast_player_join() {
     }
 
     LOG_INFO(nickname + " (" + std::to_string(player->getId()) + ") joined the game");
-    PluginPlayer snapshot{player->getId(), player->getNickname()};
+    std::string nick = player->getNickname();
+    PluginPlayer snapshot{player->getId(), nick.c_str(), nick.length()};
     Server::get_instance().get_plugin_manager().emit_player_join(snapshot);
 }
 

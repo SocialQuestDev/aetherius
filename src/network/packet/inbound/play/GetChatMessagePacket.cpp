@@ -12,7 +12,8 @@ void GetChatMessagePacket::handle(Connection &connection) {
         if (!player) return;
 
         std::string filtered_msg = msg;
-        PluginPlayer snapshot{player->getId(), player->getNickname()};
+        std::string nickname = player->getNickname();
+        PluginPlayer snapshot{player->getId(), nickname.c_str(), nickname.length()};
         if (!Server::get_instance().get_plugin_manager().emit_player_chat(snapshot, filtered_msg)) {
             return;
         }

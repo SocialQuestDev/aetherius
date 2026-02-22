@@ -32,18 +32,18 @@ class LuaPluginManager : public IPluginManager {
 public:
     explicit LuaPluginManager(CommandRegistry& command_registry);
 
-    void start();
-    void stop();
+    void start() override;
+    void stop() override;
 
-    void load_all();
-    void unload_all();
-    void reload_all();
-    void tick();
-    void emit_server_start();
-    void emit_server_stop();
-    void emit_player_join(const PluginPlayer& player);
-    void emit_player_leave(const PluginPlayer& player, const std::string& reason);
-    bool emit_player_chat(const PluginPlayer& player, std::string& message);
+    void load_all() override;
+    void unload_all() override;
+    void reload_all() override;
+    void tick() override;
+    void emit_server_start() override;
+    void emit_server_stop() override;
+    void emit_player_join(const PluginPlayer& player) override;
+    void emit_player_leave(const PluginPlayer& player, const std::string& reason) override;
+    bool emit_player_chat(const PluginPlayer& player, std::string& message) override;
 
     void invoke_command(sol::protected_function callback,
                         const std::string& plugin_name,

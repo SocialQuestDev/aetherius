@@ -19,9 +19,11 @@ void LuaGameCommand::execute(std::shared_ptr<Player> player, const std::vector<s
         return;
     }
 
+    std::string nickname = player->getNickname();
+
     std::optional<PluginPlayer> ref;
     if (player) {
-        ref = PluginPlayer{player->getId(), player->getNickname()};
+        ref = PluginPlayer{player->getId(), nickname.c_str(), nickname.length()};
     }
     manager_.invoke_command(callback_, plugin_name_, ref, args);
 }

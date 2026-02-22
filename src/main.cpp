@@ -4,6 +4,7 @@
 #include <thread>
 #include <vector>
 #include <algorithm>
+#include <stdlib.h>
 #include "Server.h"
 #include "console/Logger.h"
 
