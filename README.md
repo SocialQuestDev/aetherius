@@ -11,7 +11,7 @@
 
 ## 🚧 Репозиторий и Доступ
 
-> **Внимание:** На данный момент репозиторий [SocialQuestDev/aetherius](htttps://github.com/SocialQuestDev/aetherius) находится в режиме **Private Alpha**. Доступ предоставляется только по приглашениям. Публичный релиз запланирован в Roadmap.
+> **Внимание:** На данный момент репозиторий [SocialQuestDev/aetherius](htttps://github.com/SocialQuestDev/aetherius) находится в режиме **Public Alpha**. Доступ предоставляется только по приглашениям. Публичный релиз запланирован в Roadmap.
 
 ---
 
@@ -44,7 +44,7 @@ Minecraft индустрия годами ограничена рамками JV
 * Безопасная песочница для пользовательских скриптов.
 
 
-2. **C# .NET 8+ (Enterprise Grade):**
+2. **C# .NET 10+ (Enterprise Grade):**
 * Использование мощностей современного .NET вместо тяжеловесного JNI/Java.
 * Высокая скорость разработки сложных систем (экономика, БД, интеграции).
 * Низкий порог входа для разработчиков, привыкших к типизированным языкам.
@@ -59,7 +59,7 @@ Minecraft индустрия годами ограничена рамками JV
 | --- | --- | --- |
 | **Language** | **C++20** | Основной язык ядра (Concepts, Coroutines). |
 | **Scripting** | **Luau** | Быстрый скриптинг с проверкой типов. |
-| **Managed SDK** | **.NET 8+ / C#** | Основная среда для сложных плагинов. |
+| **Managed SDK** | **.NET 10+ / C#** | Основная среда для сложных плагинов. |
 | **Networking** | **Asio / OpenSSL** | Асинхронная обработка пакетов и шифрование. |
 | **Data** | **NBT / Protobuf** | Сериализация данных. |
 | **Architecture** | **EnTT (ECS)** | Система сущностей для обработки тысяч мобов. |
@@ -101,13 +101,13 @@ Minecraft индустрия годами ограничена рамками JV
 
 * **Compiler:** GCC 11+, Clang 14+ или MSVC 2022.
 * **Tools:** CMake 3.22+, Git.
-* **Environment:** .NET 8 SDK (для разработки и сборки C# модулей).
+* **Environment:** .NET 10 SDK (для разработки и сборки C# модулей).
 
 ### Сборка проекта (🐧 Linux)
 
 ```bash
 # 1. Клонирование
-git clone https://github.com/wexelsdev/aetherius.git
+git clone https://github.com/SocialQuestDev/aetherius.git
 cd aetherius
 
 # 2. Обновление зависимостей (Luau, Asio, и др.)
@@ -131,7 +131,7 @@ cmake --build . --parallel
 
 <div align="center">
 
-Developed with ❤️ and C++ by **[wexels.dev](https://github.com/wexelsdev)**, **[glitching.today](https://github.com/todayisglitching)**, **[Pawmi](https://github.com/pawmii)**.
+Developed with ❤️ and C++ by **[wexels.dev](https://github.com/wexelsdev)**, **[glitching.today](https://github.com/todayisglitching)**, **[Pawmi](https://github.com/pawmii)**, && Aetherius contributors.
 *Revolutionizing the blocky world.*
 
 </div>
